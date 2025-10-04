@@ -1,5 +1,6 @@
 // Author: Gabriel J. Dungan <gjdunga@gmail.com> 
-// Modern Item Blocker Version 3.0.3
+// Modern Item Blocker Version 3.0.5
+// Date: October 04 2025 - 15:52:00 MDT
 // -- MIT LICENSE -- 
 // -- 
 
@@ -15,10 +16,11 @@ using System.Globalization;
 using System.Linq;
 using UnityEngine;
 
+
 namespace Oxide.Plugins
 {
     // Updated author per user request
-    [Info("ModernItemBlocker", "gjdunga", "3.0.4")]
+    [Info("ModernItemBlocker", "gjdunga", "3.0.5")]
     [Description("Blocks items, clothing and ammunition temporarily after a wipe or permanently until removed. Provides admin commands via chat, RCON and UI with permissions.")]
     public class ModernItemBlocker : RustPlugin
     {
@@ -145,6 +147,20 @@ namespace Oxide.Plugins
         #region Initialization
         private void Init()
         {
+            // Ensure permissions are prefixed with the plugin name (lowercase) to avoid Oxide warnings.
+            var prefix = Name.ToLowerInvariant();
+            if (!_config.BypassPermission.StartsWith(prefix + ".", StringComparison.OrdinalIgnoreCase))
+            {
+                _config.BypassPermission = $"{prefix}.bypass";
+                PrintWarning($"Bypass permission name updated to {_config.BypassPermission} to match plugin prefix.");
+                SaveConfig();
+            }
+            if (!_config.AdminPermission.StartsWith(prefix + ".", StringComparison.OrdinalIgnoreCase))
+            {
+                _config.AdminPermission = $"{prefix}.admin";
+                PrintWarning($"Admin permission name updated to {_config.AdminPermission} to match plugin prefix.");
+                SaveConfig();
+            }
             permission.RegisterPermission(_config.BypassPermission, this);
             permission.RegisterPermission(_config.AdminPermission, this);
         }
