@@ -2,10 +2,11 @@
 // Modern Item Blocker Version 3.0.3
 // -- MIT LICENSE -- 
 // -- 
+
 using Oxide.Game.Rust.Cui;
 using Oxide.Game.Rust.Libraries;
-using Oxide.Core.Plugins;
 using Oxide.Core.Libraries.Covalence;
+using Oxide.Core.Plugins;
 using Oxide.Core;
 using Newtonsoft.Json;
 using System;
@@ -14,11 +15,10 @@ using System.Globalization;
 using System.Linq;
 using UnityEngine;
 
-
 namespace Oxide.Plugins
 {
-    
-    [Info("ModernItemBlocker", "gjdunga", "3.0.3")]
+    // Updated author per user request
+    [Info("ModernItemBlocker", "gjdunga", "3.0.4")]
     [Description("Blocks items, clothing and ammunition temporarily after a wipe or permanently until removed. Provides admin commands via chat, RCON and UI with permissions.")]
     public class ModernItemBlocker : RustPlugin
     {
@@ -49,8 +49,9 @@ namespace Oxide.Plugins
             [JsonProperty("Timed Blocked Ammo")]
             public List<string> TimedBlockedAmmo = new List<string>();
 
-            [JsonProperty("Bypass Permission")] public string BypassPermission = "modernblocker.bypass";
-            [JsonProperty("Admin Permission")] public string AdminPermission = "modernblocker.admin";
+            // Permissions should follow the plugin name prefix "modernitemblocker" to avoid warnings from Oxide.
+            [JsonProperty("Bypass Permission")] public string BypassPermission = "modernitemblocker.bypass";
+            [JsonProperty("Admin Permission")] public string AdminPermission = "modernitemblocker.admin";
 
             [JsonProperty("Chat Prefix")] public string ChatPrefix = "[ModernBlocker]";
             [JsonProperty("Chat Prefix Color")] public string ChatPrefixColor = "#f44253";
@@ -172,12 +173,12 @@ namespace Oxide.Plugins
         {
             lang.RegisterMessages(new Dictionary<string, string>
             {
-                ["ItemBlocked"] = "Sorry, You cannot use this item.",
-                ["ClothBlocked"] = "Sorry, You cannot wear this clothing item.",
-                ["AmmoBlocked"] = "Sorry, You cannot use this ammunition.",
+                ["ItemBlocked"] = "You cannot use this item.",
+                ["ClothBlocked"] = "You cannot wear this clothing item.",
+                ["AmmoBlocked"] = "You cannot use this ammunition.",
                 ["TimedSuffix"] = "\n{0}d {1:00}:{2:00}:{3:00} until unblock.",
                 ["PermanentSuffix"] = "\nThis item is permanently blocked until removed.",
-                ["NotAllowed"] = "Sorry, You do not have permission to use this command.",
+                ["NotAllowed"] = "You do not have permission to use this command.",
                 ["InvalidArgs"] = "Invalid syntax. Use /modernblocker help for details.",
                 ["Added"] = "Added {0} to {1} {2} list.",
                 ["Removed"] = "Removed {0} from {1} {2} list.",
@@ -245,7 +246,7 @@ namespace Oxide.Plugins
             Item ammoItem = null;
             var ammoId = projectile.primaryMagazine.ammoType.itemid;
             // Find the first item in the player's inventory that matches the ammo ID
-            var current = Pool.GetList<Item>();
+            var current = Facepunch.Pool.GetList<Item>();
             try
             {
                 // New API in recent Rust versions requires passing a List<Item> and the ID
@@ -257,7 +258,7 @@ namespace Oxide.Plugins
                 else
                 {
                     // Fallback: search using FindAmmo for the types defined in the magazine definition
-                    var list = Pool.GetList<Item>();
+                    var list = Facepunch.Pool.GetList<Item>();
                     try
                     {
                         player.inventory.FindAmmo(list, projectile.primaryMagazine.definition.ammoTypes);
@@ -268,13 +269,13 @@ namespace Oxide.Plugins
                     }
                     finally
                     {
-                        Pool.FreeList(ref list);
+                        Facepunch.Pool.FreeList(ref list);
                     }
                 }
             }
             finally
             {
-                Pool.FreeList(ref current);
+                Facepunch.Pool.FreeList(ref current);
             }
             if (ammoItem == null) return null;
             var name = ammoItem.info.displayName.english;
