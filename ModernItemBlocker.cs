@@ -1,3 +1,7 @@
+// Author: Gabriel J. Dungan <gjdunga@gmail.com> 
+// Modern Item Blocker Version 3.0.3
+// -- MIT LICENSE -- 
+// -- 
 using Oxide.Game.Rust.Cui;
 using Oxide.Game.Rust.Libraries;
 using Oxide.Core.Plugins;
@@ -10,10 +14,12 @@ using System.Globalization;
 using System.Linq;
 using UnityEngine;
 
+
 namespace Oxide.Plugins
 {
-    [Info("ModernItemBlocker", "gjdunga", "3.0.0")]
-    [Description("Modern Item Blocker - Blocks items, clothing and ammunition temporarily after a wipe or permanently until removed. Provides admin commands via chat, RCON and UI with permissions.")]
+    
+    [Info("ModernItemBlocker", "gjdunga", "3.0.3")]
+    [Description("Blocks items, clothing and ammunition temporarily after a wipe or permanently until removed. Provides admin commands via chat, RCON and UI with permissions.")]
     public class ModernItemBlocker : RustPlugin
     {
         // File name for storing the plugin configuration externally in the data directory
@@ -51,21 +57,13 @@ namespace Oxide.Plugins
 
             public static Configuration DefaultConfig()
             {
+                // Return a configuration with no default items, clothes or ammo blocked.
                 return new Configuration
                 {
                     BlockDurationHours = 30,
-                    TimedBlockedItems = new List<string>
-                    {
-                        
-                    },
-                    TimedBlockedClothes = new List<string>
-                    {
-                        
-                    },
-                    TimedBlockedAmmo = new List<string>
-                    {
-                        
-                    },
+                    TimedBlockedItems = new List<string>(),
+                    TimedBlockedClothes = new List<string>(),
+                    TimedBlockedAmmo = new List<string>(),
                     PermanentBlockedItems = new List<string>(),
                     PermanentBlockedClothes = new List<string>(),
                     PermanentBlockedAmmo = new List<string>()
@@ -246,17 +244,37 @@ namespace Oxide.Plugins
             // Determine ammo type currently being loaded or used
             Item ammoItem = null;
             var ammoId = projectile.primaryMagazine.ammoType.itemid;
-            var current = player.inventory.FindItemIDs(ammoId);
-            if (current != null && current.Count > 0)
+            // Find the first item in the player's inventory that matches the ammo ID
+            var current = Pool.GetList<Item>();
+            try
             {
-                ammoItem = current[0];
+                // New API in recent Rust versions requires passing a List<Item> and the ID
+                player.inventory.FindItemsByItemID(current, ammoId);
+                if (current.Count > 0)
+                {
+                    ammoItem = current[0];
+                }
+                else
+                {
+                    // Fallback: search using FindAmmo for the types defined in the magazine definition
+                    var list = Pool.GetList<Item>();
+                    try
+                    {
+                        player.inventory.FindAmmo(list, projectile.primaryMagazine.definition.ammoTypes);
+                        if (list.Count > 0)
+                        {
+                            ammoItem = list[0];
+                        }
+                    }
+                    finally
+                    {
+                        Pool.FreeList(ref list);
+                    }
+                }
             }
-            else
+            finally
             {
-                var list = Pool.GetList<Item>();
-                player.inventory.FindAmmo(list, projectile.primaryMagazine.definition.ammoTypes);
-                if (list.Count > 0) ammoItem = list[0];
-                Pool.FreeList(ref list);
+                Pool.FreeList(ref current);
             }
             if (ammoItem == null) return null;
             var name = ammoItem.info.displayName.english;
