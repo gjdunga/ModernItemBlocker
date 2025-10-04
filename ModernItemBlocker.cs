@@ -1,6 +1,7 @@
 using Oxide.Game.Rust.Cui;
 using Oxide.Game.Rust.Libraries;
 using Oxide.Core.Plugins;
+using Oxide.Core.Libraries.Covalence;
 using Oxide.Core;
 using Newtonsoft.Json;
 using System;
