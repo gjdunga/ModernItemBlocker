@@ -1,53 +1,115 @@
-# ModernItemBlocker
-(RUST) (uMod) (C#) Allows one to block usage/crafting of certain items.  This can be done per wipe, per person and for a timed amount of time. 
+ModernItemBlocker
 
-I have modernized the code and added new functionality so that administrators can permanently block items for an entire wipe and have those blocks persist across wipes until explicitly changed. Key improvements include:
+ModernItemBlocker is a Rust server plug‑in for the uMod/Oxide framework that allows administrators to block specific items, clothing and ammunition either for a limited time after each wipe or permanently until removed. The plug‑in is designed to be configurable, efficient and easy to manage via in‑game chat, the F1 developer console, RCON or the server console.
 
-Persistent blocking lists: Added configuration fields for “List of permanently blocked items/clothes/ammunition” alongside the existing timed lists. These lists persist across wipes and are enforced even when the timed block has expired.
+Features
 
-Admin management commands: Implemented chat/console commands with sub‑commands list, add and remove. Administrators (or those with the permission) can view, add or remove items from the permanent block lists without touching the configuration file.
+Timed and permanent blocks – Define separate lists of items, clothes and ammunition that are blocked for a configurable number of hours after each wipe (timed) or blocked indefinitely across wipes (permanent). Timed blocks automatically expire once the configured duration has passed.
 
-Permission registration: Registered a new permission in addition to the existing bypass and refresh permissions.
+Configuration file – All settings and lists are stored in oxide/data/ModernItemBlockerConfig.json. The plug‑in will create this file on first run and populate it with sensible defaults. You can edit it manually and reload it in game with /modernblocker reload.
 
-Performance and security: Converted all block lists to case‑insensitive HashSets for faster lookups. Added checks to avoid null references, early returns and unnecessary GUI operations. Added new localized messages for permanently blocked items, clothing and ammo. Replaced outdated WWW web requests with modern async download logic.
+Administrative commands – Manage blocked items directly from the game or via RCON without editing files. The /modernblocker command supports listing the current block lists, adding new entries and removing existing ones.
 
-Unified blocking logic: Updated CanEquipItem, CanWearItem and ammunition hooks to always check permanent lists first, then the timed lists if the block timer is active. Added new messages indicating permanent blocks when relevant.
+Permission system – Use the standard uMod permission system to control who can use the management commands or bypass blocks entirely. See the Permissions section below.
 
-Key features & usage
+Localization – All player‑facing messages are defined via the Lang API and can be translated or customized by adding language files under oxide/lang.
 
-Timed and permanent blocks: The configuration separates “Timed” and “Permanent” lists for items, clothing and ammunition. Timed lists are enforced after each wipe for a configurable number of hours. Permanent lists persist across wipes until explicitly removed.
+Wipe detection – The plug‑in listens for the OnNewSave hook to detect wipes and automatically resets the timed block timer.
 
-Admin commands accessible everywhere: The command /modernblocker works from chat, the F1 client console, RCON or the server console. Use it to list, add or remove entries from either the timed or permanent lists:
+Optional Duel detection – If the optional Duel plug‑in is installed, players in active duels are exempt from item blocking.
 
-/modernblocker list – shows all blocked items, clothes and ammo.
+Installation
 
-/modernblocker add <permanent|timed> <item|cloth|ammo> <name> – adds a name to the chosen list.
+Ensure your server is running uMod/Oxide version v2.0.6599 or newer.
 
-/modernblocker remove <permanent|timed> <item|cloth|ammo> <name> – removes an entry.
+Download ModernItemBlocker.cs and place it into the oxide/plugins directory on your Rust server.
 
-/modernblocker help – shows usage instructions.
+Start the server or reload the plug‑in with oxide.reload ModernItemBlocker. The plug‑in will generate a configuration file at oxide/data/ModernItemBlockerConfig.json.
 
-Permissions:
+Commands
 
-modernblocker.admin – required to execute /modernblocker commands. Server admins automatically have access, but you can grant this to other users.
+All commands can be run in chat (prefixed with /), in the F1 client console, via RCON or in the server console. If using chat, do not include brackets (< and >); they indicate placeholders.
 
-modernblocker.bypass – exempt players from all blocks (useful for moderators or special roles).
+/modernblocker list
 
-Messages & UI: When a player attempts to use a blocked item, clothing or ammo, they receive a chat message with either a timer (“x days hh:mm:ss until unblock”) or a notice that the item is permanently blocked until removed.
+Displays all blocked items, clothes and ammunition in both the permanent and timed categories.
 
-Automatic wipe detection: The plug‑in listens for OnNewSave to reset the timed block window based on the configured duration.
+/modernblocker add <permanent|timed> <item|cloth|ammo> <name>
 
-You can drop the compiled script below into your server’s oxide/plugins folder and adjust the default configuration as needed.
+Adds an entry to the specified list. For example:
 
-The ModernItemBlocker plugin has been updated so that it now stores its configuration in a separate JSON file and provides an in‑game reload command.
+/modernblocker add permanent item Assault Rifle
+/modernblocker add timed ammo High Velocity Rocket
 
-What’s new
 
-External configuration file – Instead of using the default uMod config system, the plugin now saves and loads its settings from a file named ModernItemBlockerConfig.json in your server’s oxide/data directory. When the plugin first runs, it will generate this file if it doesn’t exist.
+Item names are case‑insensitive and may be specified by their English display name or short name.
 
-Automatic persistence – Whenever you add or remove entries using /modernblocker, the updated configuration is written to this data file. Wipe events also trigger a save.
+/modernblocker remove <permanent|timed> <item|cloth|ammo> <name>
 
-Reload command – Use /modernblocker reload (in chat, RCON or the server console) to reload the configuration from disk without reloading the entire plugin. This lets you edit ModernItemBlockerConfig.json by hand and apply changes on the fly.
+Removes an entry from the specified list. Names are matched case‑insensitively.
 
-Updated usage message – The help text now includes the reload command.
+/modernblocker reload
 
+Reloads the configuration from oxide/data/ModernItemBlockerConfig.json without unloading the plug‑in. Use this after editing the file by hand.
+
+/modernblocker help
+
+Displays a summary of the available commands and usage.
+
+Configuration
+
+The configuration file is stored at oxide/data/ModernItemBlockerConfig.json. An example configuration is shown below:
+
+{
+  "Block Duration (Hours) after Wipe": 30,
+  "Permanent Blocked Items": [],
+  "Permanent Blocked Clothes": [],
+  "Permanent Blocked Ammo": [],
+  "Timed Blocked Items": [],
+  "Timed Blocked Clothes": [],
+  "Timed Blocked Ammo": [],
+  "Bypass Permission": "modernitemblocker.bypass",
+  "Admin Permission": "modernitemblocker.admin",
+  "Chat Prefix": "[ModernBlocker]",
+  "Chat Prefix Color": "#f44253"
+}
+
+
+Block Duration (Hours) after Wipe – Number of hours after a wipe (i.e. after OnNewSave) during which timed blocks are enforced.
+
+Permanent Blocked Items / Clothes / Ammo – Lists of names or short names of items, clothing and ammunition that are always blocked until removed.
+
+Timed Blocked Items / Clothes / Ammo – Lists of names or short names of items that are blocked for the duration specified above after each wipe.
+
+Bypass Permission – Permission string granted to players who should be exempt from all blocks.
+
+Admin Permission – Permission string required to use the management commands.
+
+Chat Prefix / Chat Prefix Color – Prefix and color used for messages sent by the plug‑in.
+
+After editing the configuration, use /modernblocker reload to apply your changes without restarting the server.
+
+Permissions
+
+The plug‑in uses the uMod permission system. To grant a permission, use the oxide.grant command. For example:
+
+oxide.grant group admin modernitemblocker.admin
+oxide.grant user 76561198012345678 modernitemblocker.bypass
+
+
+modernitemblocker.admin – Allows a player to use /modernblocker commands to list, add, remove and reload configurations. The server owner and RCON are implicitly considered admins.
+
+modernitemblocker.bypass – Exempts a player from all item, clothing and ammunition blocks. Ideal for moderators or special roles.
+
+Localization
+
+All player‑facing messages are defined using the uMod Lang API. The default English messages are registered by the plug‑in. To provide translations or customize messages, create a file named ModernItemBlocker.<language>.json in your server’s oxide/lang directory (for example, oxide/lang/fr/ModernItemBlocker.json for French). Use the same keys as the English messages and provide your own text.
+
+License
+
+This project is licensed under the MIT License. See LICENSE.md
+ for details.
+
+Credits
+
+Written by Gabriel J. Dungan (gjdunga).
