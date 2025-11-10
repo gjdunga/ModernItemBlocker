@@ -1,0 +1,44 @@
+{
+  "name": "ModernItemBlocker",
+  "title": "Modern Item Blocker",
+  "version": "3.0.5",
+  "author": "gjdunga",
+  "license": "MIT",
+  "description": "Blocks items, clothing and ammunition temporarily after a wipe or permanently until removed. Provides admin commands via chat, console and RCON with permissions.",
+  "games": ["rust"],
+  "language": "csharp",
+  "website": "https://github.com/gjdunga/ModernItemBlocker",
+  "source": "https://github.com/gjdunga/ModernItemBlocker",
+  "documentation": "https://github.com/gjdunga/ModernItemBlocker#readme",
+  "issues": "https://github.com/gjdunga/ModernItemBlocker/issues",
+  "categories": ["Items", "Permissions", "Administration", "Quality of Life"],
+  "permissions": [
+    {
+      "name": "modernitemblocker.bypass",
+      "description": "Exempts the user from all block checks."
+    },
+    {
+      "name": "modernitemblocker.admin",
+      "description": "Allows access to all administrative commands for managing blocked items."
+    }
+  ],
+  "commands": [
+    {
+      "command": "modernblocker",
+      "arguments": "[list|add|remove|reload] [permanent|timed] [item|cloth|ammo] [name]",
+      "description": "Chat, console or RCON command for listing blocked items and adding/removing entries or reloading configuration."
+    }
+  ],
+  "compatibility": {
+    "oxide": "2.x",
+    "game_versions": ["latest"]
+  },
+  "files": [
+    { "path": "ModernItemBlocker.cs", "role": "plugin" },
+    { "path": "LICENSE.md", "role": "license" },
+    { "path": "README.md", "role": "readme" },
+    { "path": "ModernItemBlockerConfig.json", "role": "config-sample" },
+    { "path": ".umod.yaml", "role": "umod-metadata" },
+    { "path": "manifest.json", "role": "manifest" }
+  ]
+}
