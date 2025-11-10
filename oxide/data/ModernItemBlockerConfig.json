@@ -1,0 +1,13 @@
+{
+  "Block Duration (Hours) after Wipe": 30,
+  "Permanent Blocked Items": [],
+  "Permanent Blocked Clothes": [],
+  "Permanent Blocked Ammo": [],
+  "Timed Blocked Items": [],
+  "Timed Blocked Clothes": [],
+  "Timed Blocked Ammo": [],
+  "Bypass Permission": "modernitemblocker.bypass",
+  "Admin Permission": "modernitemblocker.admin",
+  "Chat Prefix": "[ModernBlocker]",
+  "Chat Prefix Color": "#f44253"
+}
