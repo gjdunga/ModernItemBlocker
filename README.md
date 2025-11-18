@@ -16,7 +16,9 @@ Localization – All player‑facing messages are defined via the Lang API and c
 
 Wipe detection – The plug‑in listens for the OnNewSave hook to detect wipes and automatically resets the timed block timer.
 
-Optional Duel detection – If the optional Duel plug‑in is installed, players in active duels are exempt from item blocking.
+Optional duel detection – If a duelling plug‑in (such as Duelist or Duels Manager) is installed, players in active duels are exempt from item blocking. ModernItemBlocker automatically detects these plug‑ins and skips block checks when a player is currently duelling.
+
+Logging and audit trail – The plug‑in records all administrative changes to the block lists and any attempts by players to use or deploy blocked items. Each log entry includes the UTC timestamp, the player's or admin's name and Steam ID, the item involved and the approximate coordinates of the attempt. Logs are written to oxide/logs/ModernItemBlocker.txt and can be viewed in game using the /modernblocker loglist command.
 
 Installation
 
@@ -51,6 +53,10 @@ Removes an entry from the specified list. Names are matched case‑insensitively
 /modernblocker reload
 
 Reloads the configuration from oxide/data/ModernItemBlockerConfig.json without unloading the plug‑in. Use this after editing the file by hand.
+
+/modernblocker loglist
+
+Displays the last 20 entries from the plug‑in’s log file. This command is restricted to users with the modernitemblocker.admin permission. Each log entry shows when an administrator added or removed items from the block lists, or when a player attempted to equip, wear, reload or deploy a blocked item. To review the entire log, open oxide/logs/ModernItemBlocker.txt on your server.
 
 /modernblocker help
 
@@ -100,6 +106,34 @@ oxide.grant user 76561198012345678 modernitemblocker.bypass
 modernitemblocker.admin – Allows a player to use /modernblocker commands to list, add, remove and reload configurations. The server owner and RCON are implicitly considered admins.
 
 modernitemblocker.bypass – Exempts a player from all item, clothing and ammunition blocks. Ideal for moderators or special roles.
+
+Logging
+
+ModernItemBlocker automatically writes a log file to oxide/logs/ModernItemBlocker.txt. The log captures two types of events:
+
+Administrative actions – Whenever a user with the modernitemblocker.admin permission adds or removes an entry from any block list (timed or permanent), the plug‑in writes a log entry with the date and time (in UTC), the admin’s display name, their Steam ID, and the action performed.
+
+Blocked usage attempts – When a player attempts to equip, wear, reload or deploy an item that is currently blocked, the plug‑in logs the date and time, the player’s display name and Steam ID, the item name (display and short name) and the player’s approximate coordinates.
+
+Viewing logs in game
+
+To view recent log entries without opening the file directly, use the /modernblocker loglist command in chat, RCON or the F1 console. This command lists the last 20 log entries and is restricted to users with the modernitemblocker.admin permission. For more extensive review, open oxide/logs/ModernItemBlocker.txt with a text editor.
+
+Duels integration
+
+ModernItemBlocker includes an optional integration with duelling plug‑ins so that players engaged in a duel are not penalized by the block lists. The integration is automatic and requires no configuration—simply install one of the supported duelling plug‑ins alongside ModernItemBlocker:
+
+Duelist – A feature‑rich duelling system with betting, queues, a ranked ladder, rematches and its own UI
+umod.org
+.
+
+Duels Manager – Allows two players to start a duel that runs on a timer and is canceled if there is no activity or if the duelists attack other players
+umod.org
+. The plug‑in exposes an API method IsInDuel(Player player1, Player player2) which returns true when the specified players are currently duelling
+umod.org
+.
+
+If the Duels Manager plug‑in is detected, ModernItemBlocker will call IsInDuel with the player passed for both parameters (since only the calling player context is available). A return value of true exempts the player from item blocks. If you install Duelist or another duelling plug‑in, the plug‑in will instead call IsPlayerOnActiveDuel(BasePlayer player) as provided by that plug‑in. If no duelling plug‑in is installed, the duelling check has no effect.
 
 Localization
 
