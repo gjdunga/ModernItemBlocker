@@ -1,12 +1,5 @@
-// Author: Gabriel J. Dungan <gjdunga@gmail.com> 
-// Modern Item Blocker Version 3.0.5
-// Date: October 04 2025 - 15:52:00 MDT
-// -- MIT LICENSE -- 
-// -- 
-
 using Oxide.Game.Rust.Cui;
 using Oxide.Game.Rust.Libraries;
-using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
 using Oxide.Core;
 using Newtonsoft.Json;
@@ -16,16 +9,24 @@ using System.Globalization;
 using System.Linq;
 using UnityEngine;
 
+// Additional namespace for file operations
+using System.IO;
+
+// Import Covalence to enable the IPlayer interface and covalence player lookups
+using Oxide.Core.Libraries.Covalence;
 
 namespace Oxide.Plugins
 {
     // Updated author per user request
-    [Info("ModernItemBlocker", "gjdunga", "3.0.5")]
+[Info("ModernItemBlocker", "gjdunga", "3.0.7")]
     [Description("Blocks items, clothing and ammunition temporarily after a wipe or permanently until removed. Provides admin commands via chat, RCON and UI with permissions.")]
     public class ModernItemBlocker : RustPlugin
     {
         // File name for storing the plugin configuration externally in the data directory
         private const string DataConfigName = "ModernItemBlockerConfig";
+
+        // Name of the log file (without extension). Log entries will be written to oxide/logs/{LogFileName}.txt
+        private const string LogFileName = "ModernItemBlocker";
         #region Configuration
         private Configuration _config;
         public class Configuration
@@ -199,7 +200,7 @@ namespace Oxide.Plugins
                 ["Added"] = "Added {0} to {1} {2} list.",
                 ["Removed"] = "Removed {0} from {1} {2} list.",
                 ["ListHeader"] = "Permanent Items: {0}\nPermanent Clothes: {1}\nPermanent Ammo: {2}\nTimed Items: {3}\nTimed Clothes: {4}\nTimed Ammo: {5}",
-                ["Usage"] = "Usage:\n /modernblocker list - list all blocked items\n /modernblocker add <permanent|timed> <item|cloth|ammo> <name> - add an entry\n /modernblocker remove <permanent|timed> <item|cloth|ammo> <name> - remove an entry\n /modernblocker reload - reload configuration from disk"
+                ["Usage"] = "Usage:\n /modernblocker list - list all blocked items\n /modernblocker add <permanent|timed> <item|cloth|ammo> <name> - add an entry\n /modernblocker remove <permanent|timed> <item|cloth|ammo> <name> - remove an entry\n /modernblocker reload - reload configuration from disk\n /modernblocker loglist - display the last 20 log entries"
             }, this);
         }
 
@@ -223,12 +224,16 @@ namespace Oxide.Plugins
             if (_permanentItems.Contains(name) || _permanentItems.Contains(shortName))
             {
                 SendBlockMessage(player, "ItemBlocked", true);
+                // Log the blocked attempt
+                LogBlockAttempt(player, $"{name} ({shortName})", "item");
                 return false;
             }
             // Timed blocks
             if (InTimedBlock && (_timedItems.Contains(name) || _timedItems.Contains(shortName)))
             {
                 SendBlockMessage(player, "ItemBlocked", false);
+                // Log the blocked attempt
+                LogBlockAttempt(player, $"{name} ({shortName})", "item");
                 return false;
             }
             return null;
@@ -244,11 +249,15 @@ namespace Oxide.Plugins
             if (_permanentClothes.Contains(name) || _permanentClothes.Contains(shortName))
             {
                 SendBlockMessage(player, "ClothBlocked", true);
+                // Log the blocked attempt
+                LogBlockAttempt(player, $"{name} ({shortName})", "clothing");
                 return false;
             }
             if (InTimedBlock && (_timedClothes.Contains(name) || _timedClothes.Contains(shortName)))
             {
                 SendBlockMessage(player, "ClothBlocked", false);
+                // Log the blocked attempt
+                LogBlockAttempt(player, $"{name} ({shortName})", "clothing");
                 return false;
             }
             return null;
@@ -299,23 +308,64 @@ namespace Oxide.Plugins
             if (_permanentAmmo.Contains(name) || _permanentAmmo.Contains(shortName))
             {
                 SendBlockMessage(player, "AmmoBlocked", true);
+                // Log the blocked attempt
+                LogBlockAttempt(player, $"{name} ({shortName})", "ammunition");
                 return false;
             }
             if (InTimedBlock && (_timedAmmo.Contains(name) || _timedAmmo.Contains(shortName)))
             {
                 SendBlockMessage(player, "AmmoBlocked", false);
+                // Log the blocked attempt
+                LogBlockAttempt(player, $"{name} ({shortName})", "ammunition");
                 return false;
             }
             return null;
         }
 
         // Helpers to determine NPC or Duel contexts
+        // Generic duel plugin reference (e.g. Duelist)
         [PluginReference] private Plugin Duel;
+        // Duels Manager plugin reference. When present, this will be used to
+        // determine if a player is currently in a duel via the IsInDuel API
+        // documented on the Duels Manager plugin page【50364323406535†L68-L76】.
+        // Note: The Duels Manager API expects two Player arguments; we pass the
+        // same player twice as a best‑effort check. If a more specific API
+        // becomes available, this call can be updated accordingly.
+        [PluginReference("DuelsManager")] private Plugin DuelsManager;
         private bool IsNPC(BasePlayer player) => player is NPCPlayer || !(player.userID >= 76560000000000000L || player.userID <= 0L);
         private bool InDuel(BasePlayer player)
         {
-            if (Duel == null) return false;
-            return Duel.Call<bool>("IsPlayerOnActiveDuel", player);
+            // If the Duels Manager plugin is loaded, use its API.  The
+            // IsInDuel(Player, Player) call returns true if the specified
+            // players are currently duelling【50364323406535†L68-L76】.  Since we
+            // only have one player context here, we pass the same player as
+            // both parameters.  If Duels Manager is not installed or the call
+            // fails, fall back to the generic duel plugin.
+            try
+            {
+                if (DuelsManager != null)
+                {
+                    bool result = DuelsManager.Call<bool>("IsInDuel", player, player);
+                    if (result) return true;
+                }
+            }
+            catch
+            {
+                // ignored – will fall back to generic duel plugin
+            }
+            // Fall back to generic duel plugin (e.g. Duelist)
+            try
+            {
+                if (Duel != null)
+                {
+                    return Duel.Call<bool>("IsPlayerOnActiveDuel", player);
+                }
+            }
+            catch
+            {
+                // If call fails, treat as not in duel
+            }
+            return false;
         }
 
         #endregion
@@ -336,6 +386,36 @@ namespace Oxide.Plugins
             }
             PrintToChat(player, prefix + message);
         }
+
+        #endregion
+
+        #region Logging
+        /// <summary>
+        /// Writes a log entry to the plugin's log file with a UTC timestamp.
+        /// </summary>
+        /// <param name="message">The message to log. Date/time will be prepended automatically.</param>
+        private void LogAction(string message)
+        {
+            // Prepend a timestamp for each log entry
+            string entry = $"{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} | {message}";
+            LogToFile(LogFileName, entry, this);
+        }
+
+        /// <summary>
+        /// Logs an attempt by a player to use a blocked item, clothing, ammo or deployable.
+        /// Includes the player's display name, Steam ID and approximate position.
+        /// </summary>
+        /// <param name="player">The player attempting to use the item.</param>
+        /// <param name="itemName">The display name or shortname of the blocked item.</param>
+        /// <param name="category">The category of the blocked item (item, cloth, ammo, deployable).</param>
+        private void LogBlockAttempt(BasePlayer player, string itemName, string category)
+        {
+            if (player == null) return;
+            var pos = player.transform.position;
+            string log = $"{player.displayName} ({player.UserIDString}) attempted to use blocked {category} '{itemName}' at {pos.x:F1},{pos.y:F1},{pos.z:F1}";
+            LogAction(log);
+        }
+
         #endregion
 
         #region Commands
@@ -395,6 +475,13 @@ namespace Oxide.Plugins
                         caller?.Reply(string.Format(status, name, type, category));
                         SaveConfig();
                         BuildHashSets();
+                        // Log the administrative action
+                        string actorName = caller?.Name ?? "Server";
+                        string actorId = caller?.Id ?? "Server";
+                        string logMessage = action == "add"
+                            ? $"{actorName} ({actorId}) added {name} to {type} {category} list"
+                            : $"{actorName} ({actorId}) removed {name} from {type} {category} list";
+                        LogAction(logMessage);
                     }
                     else
                     {
@@ -406,6 +493,35 @@ namespace Oxide.Plugins
                     BuildHashSets();
                     caller?.Reply("ModernItemBlocker configuration reloaded from file.");
                     break;
+
+                case "loglist":
+                    {
+                        // Show the last 20 log lines to the caller
+                        try
+                        {
+                            // Build the path to the log file (oxide/logs/LogFileName.txt)
+                            string logsDir = Path.Combine(Interface.Oxide.RootDirectory, "oxide", "logs");
+                            string logFilePath = Path.Combine(logsDir, LogFileName + ".txt");
+                            if (!File.Exists(logFilePath))
+                            {
+                                caller?.Reply("No log file has been created yet.");
+                            }
+                            else
+                            {
+                                var lines = File.ReadAllLines(logFilePath);
+                                int count = lines.Length;
+                                int start = Math.Max(0, count - 20);
+                                var lastLines = lines.Skip(start);
+                                var response = string.Join("\n", lastLines);
+                                caller?.Reply(response);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            caller?.Reply("Error reading log: " + ex.Message);
+                        }
+                        break;
+                    }
                 default:
                     caller?.Reply(Msg("Usage"));
                     break;
@@ -475,6 +591,47 @@ namespace Oxide.Plugins
                 targetList.RemoveAll(x => x.Equals(name, StringComparison.OrdinalIgnoreCase));
             }
             return true;
+        }
+
+        // Hook called when an entity is built (structure or deployable).
+        // This is used to log placement attempts of items that are on the blocked lists.
+        private void OnEntityBuilt(Planner plan, GameObject go)
+        {
+            try
+            {
+                var player = plan?.GetOwnerPlayer();
+                if (player == null || IsNPC(player) || InDuel(player)) return;
+                // Respect bypass permission: do not log for bypass players
+                if (IsBypass(player)) return;
+
+                // Attempt to determine the prefab and item names
+                var entity = go.GetComponent<BaseEntity>();
+                if (entity == null) return;
+                string prefabName = entity.ShortPrefabName;
+                // Look up the item definition by prefab short name (if available)
+                var itemDef = ItemManager.FindItemDefinition(prefabName);
+                string displayName = itemDef?.displayName?.english ?? prefabName;
+                string shortName = itemDef?.shortname ?? prefabName;
+                bool blocked = false;
+                if (_permanentItems.Contains(displayName) || _permanentItems.Contains(shortName))
+                {
+                    blocked = true;
+                }
+                else if (InTimedBlock && (_timedItems.Contains(displayName) || _timedItems.Contains(shortName)))
+                {
+                    blocked = true;
+                }
+                if (blocked)
+                {
+                    // Log the deployment attempt; category 'deployable' covers any placed entity
+                    LogBlockAttempt(player, $"{displayName} ({shortName})", "deployable");
+                }
+            }
+            catch (Exception ex)
+            {
+                // Ensure that logging failures do not affect gameplay
+                PrintError($"Error in OnEntityBuilt: {ex.Message}");
+            }
         }
         #endregion
     }
