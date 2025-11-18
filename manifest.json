@@ -1,10 +1,10 @@
 {
   "name": "ModernItemBlocker",
   "title": "Modern Item Blocker",
-  "version": "3.0.5",
+  "version": "3.0.7",
   "author": "gjdunga",
   "license": "MIT",
-  "description": "Blocks items, clothing and ammunition temporarily after a wipe or permanently until removed. Provides admin commands via chat, console and RCON with permissions.",
+  "description": "Blocks items, clothing and ammunition temporarily after a wipe or permanently until removed. Provides admin commands, logging, optional duelling integration and permission-based control.",
   "games": ["rust"],
   "language": "csharp",
   "website": "https://github.com/gjdunga/ModernItemBlocker",
@@ -25,8 +25,8 @@
   "commands": [
     {
       "command": "modernblocker",
-      "arguments": "[list|add|remove|reload] [permanent|timed] [item|cloth|ammo] [name]",
-      "description": "Chat, console or RCON command for listing blocked items and adding/removing entries or reloading configuration."
+      "arguments": "[list|add|remove|reload|loglist] [permanent|timed] [item|cloth|ammo] [name]",
+      "description": "Chat, console or RCON command for listing blocked items, adding or removing entries, reloading configuration or viewing the last 20 log entries."
     }
   ],
   "compatibility": {
