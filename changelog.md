@@ -1,0 +1,1 @@
+Bumped the plugin version to 3.0.8. updated plugin with the new OnMagazineReload hook implemented for forward compatibility, while retaining the original OnReloadMagazine for older Oxide/Rust builds. This change bumps the version to 3.0.8 and ensures that reloading logic remains intact regardless of which hook the server invokes.
