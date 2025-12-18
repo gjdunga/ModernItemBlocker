@@ -1,7 +1,7 @@
 {
   "name": "ModernItemBlocker",
   "title": "Modern Item Blocker",
-  "version": "3.0.7",
+  "version": "3.0.8",
   "author": "gjdunga",
   "license": "MIT",
   "description": "Blocks items, clothing and ammunition temporarily after a wipe or permanently until removed. Provides admin commands, logging, optional duelling integration and permission-based control.",
