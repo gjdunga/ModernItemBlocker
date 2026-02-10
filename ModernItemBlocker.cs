@@ -1,36 +1,34 @@
-using Oxide.Game.Rust.Cui;
-using Oxide.Game.Rust.Libraries;
 using Oxide.Core.Plugins;
 using Oxide.Core;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using UnityEngine;
-// Import Rust namespace for new hook parameters (IAmmoContainer)
 using Rust;
-
-// Additional namespace for file operations
 using System.IO;
-
-// Import Covalence to enable the IPlayer interface and covalence player lookups
+using System.Text.RegularExpressions;
 using Oxide.Core.Libraries.Covalence;
 
 namespace Oxide.Plugins
 {
-    // Updated author per user request
-[Info("ModernItemBlocker", "gjdunga", "3.0.8")]
-    [Description("Blocks items, clothing and ammunition temporarily after a wipe or permanently until removed. Provides admin commands via chat, RCON and UI with permissions.")]
+    [Info("ModernItemBlocker", "gjdunga", "4.0.0")]
+    [Description("Blocks items, clothing and ammunition temporarily after a wipe or permanently until removed. Compatible with Oxide v2.0.7022+ and the Rust Naval Update.")]
     public class ModernItemBlocker : RustPlugin
     {
-        // File name for storing the plugin configuration externally in the data directory
         private const string DataConfigName = "ModernItemBlockerConfig";
-
-        // Name of the log file (without extension). Log entries will be written to oxide/logs/{LogFileName}.txt
         private const string LogFileName = "ModernItemBlocker";
+
+        // Regex for validating hex color codes used in Rich Text chat markup
+        private static readonly Regex HexColorRegex = new Regex(@"^#[0-9A-Fa-f]{6}$", RegexOptions.Compiled);
+
+        // Regex to strip Rich Text tags from player-facing strings
+        private static readonly Regex RichTextRegex = new Regex(@"<[^>]+>", RegexOptions.Compiled);
+
         #region Configuration
+
         private Configuration _config;
+
         public class Configuration
         {
             [JsonProperty("Block Duration (Hours) after Wipe")]
@@ -54,16 +52,20 @@ namespace Oxide.Plugins
             [JsonProperty("Timed Blocked Ammo")]
             public List<string> TimedBlockedAmmo = new List<string>();
 
-            // Permissions should follow the plugin name prefix "modernitemblocker" to avoid warnings from Oxide.
-            [JsonProperty("Bypass Permission")] public string BypassPermission = "modernitemblocker.bypass";
-            [JsonProperty("Admin Permission")] public string AdminPermission = "modernitemblocker.admin";
+            [JsonProperty("Bypass Permission")]
+            public string BypassPermission = "modernitemblocker.bypass";
 
-            [JsonProperty("Chat Prefix")] public string ChatPrefix = "[ModernBlocker]";
-            [JsonProperty("Chat Prefix Color")] public string ChatPrefixColor = "#f44253";
+            [JsonProperty("Admin Permission")]
+            public string AdminPermission = "modernitemblocker.admin";
+
+            [JsonProperty("Chat Prefix")]
+            public string ChatPrefix = "[ModernBlocker]";
+
+            [JsonProperty("Chat Prefix Color")]
+            public string ChatPrefixColor = "#f44253";
 
             public static Configuration DefaultConfig()
             {
-                // Return a configuration with no default items, clothes or ammo blocked.
                 return new Configuration
                 {
                     BlockDurationHours = 30,
@@ -81,25 +83,19 @@ namespace Oxide.Plugins
         {
             PrintWarning("Generating default configuration");
             _config = Configuration.DefaultConfig();
-            // Save the default configuration to our external data file immediately
             SaveDataConfig();
         }
 
         protected override void LoadConfig()
         {
-            // Override default config loading to use our external data config
             LoadDataConfig();
         }
 
         protected override void SaveConfig()
         {
-            // Override SaveConfig to also persist to our external data file
             SaveDataConfig();
         }
 
-        /// <summary>
-        /// Load configuration from external data file. If no data file exists, create one from default configuration.
-        /// </summary>
         private void LoadDataConfig()
         {
             try
@@ -107,6 +103,7 @@ namespace Oxide.Plugins
                 _config = Interface.Oxide.DataFileSystem.ReadObject<Configuration>(DataConfigName);
                 if (_config == null)
                     throw new Exception("Data config was null");
+                ValidateConfig();
             }
             catch
             {
@@ -116,16 +113,33 @@ namespace Oxide.Plugins
             }
         }
 
-        /// <summary>
-        /// Save the current configuration to the external data file
-        /// </summary>
         private void SaveDataConfig()
         {
             Interface.Oxide.DataFileSystem.WriteObject(DataConfigName, _config);
         }
+
+        private void ValidateConfig()
+        {
+            if (_config.BlockDurationHours < 0)
+            {
+                PrintWarning($"BlockDurationHours was negative ({_config.BlockDurationHours}), reset to 0.");
+                _config.BlockDurationHours = 0;
+            }
+
+            if (!HexColorRegex.IsMatch(_config.ChatPrefixColor))
+            {
+                PrintWarning($"ChatPrefixColor '{_config.ChatPrefixColor}' is not a valid hex color. Reset to #f44253.");
+                _config.ChatPrefixColor = "#f44253";
+            }
+
+            // Strip any Rich Text tags from the chat prefix to prevent injection
+            _config.ChatPrefix = StripRichText(_config.ChatPrefix);
+        }
+
         #endregion
 
         #region Data & State
+
         private DateTime _blockEnd;
         private HashSet<string> _timedItems;
         private HashSet<string> _timedClothes;
@@ -144,24 +158,25 @@ namespace Oxide.Plugins
             _permanentAmmo = new HashSet<string>(_config.PermanentBlockedAmmo, StringComparer.OrdinalIgnoreCase);
         }
 
-        private bool InTimedBlock => (DateTime.UtcNow < _blockEnd);
+        private bool InTimedBlock => DateTime.UtcNow < _blockEnd;
+
         #endregion
 
         #region Initialization
+
         private void Init()
         {
-            // Ensure permissions are prefixed with the plugin name (lowercase) to avoid Oxide warnings.
             var prefix = Name.ToLowerInvariant();
             if (!_config.BypassPermission.StartsWith(prefix + ".", StringComparison.OrdinalIgnoreCase))
             {
                 _config.BypassPermission = $"{prefix}.bypass";
-                PrintWarning($"Bypass permission name updated to {_config.BypassPermission} to match plugin prefix.");
+                PrintWarning($"Bypass permission updated to {_config.BypassPermission} to match plugin prefix.");
                 SaveConfig();
             }
             if (!_config.AdminPermission.StartsWith(prefix + ".", StringComparison.OrdinalIgnoreCase))
             {
                 _config.AdminPermission = $"{prefix}.admin";
-                PrintWarning($"Admin permission name updated to {_config.AdminPermission} to match plugin prefix.");
+                PrintWarning($"Admin permission updated to {_config.AdminPermission} to match plugin prefix.");
                 SaveConfig();
             }
             permission.RegisterPermission(_config.BypassPermission, this);
@@ -170,24 +185,56 @@ namespace Oxide.Plugins
 
         private void OnServerInitialized()
         {
-            // Calculate block end based on the save created time and configured duration
             if (SaveRestore.SaveCreatedTime != DateTime.MinValue)
                 _blockEnd = SaveRestore.SaveCreatedTime.AddHours(_config.BlockDurationHours);
             else
                 _blockEnd = DateTime.UtcNow.AddHours(_config.BlockDurationHours);
             BuildHashSets();
+            SubscribeHooks();
         }
 
         private void OnNewSave(string filename)
         {
-            // When a new save (wipe) is detected, recalculate the block end
+            if (_config == null) return;
             _blockEnd = DateTime.UtcNow.AddHours(_config.BlockDurationHours);
             SaveConfig();
             Puts($"Wipe detected. Block end set to {_blockEnd:dd.MM.yyyy HH:mm:ss}");
         }
+
+        /// <summary>
+        /// Unsubscribe from expensive hooks when their block lists are empty to reduce overhead.
+        /// </summary>
+        private void SubscribeHooks()
+        {
+            bool hasItems = _permanentItems.Count > 0 || _timedItems.Count > 0;
+            bool hasClothes = _permanentClothes.Count > 0 || _timedClothes.Count > 0;
+            bool hasAmmo = _permanentAmmo.Count > 0 || _timedAmmo.Count > 0;
+
+            if (!hasItems)
+                Unsubscribe(nameof(CanEquipItem));
+            else
+                Subscribe(nameof(CanEquipItem));
+
+            if (!hasClothes)
+                Unsubscribe(nameof(CanWearItem));
+            else
+                Subscribe(nameof(CanWearItem));
+
+            if (!hasAmmo)
+                Unsubscribe(nameof(OnMagazineReload));
+            else
+                Subscribe(nameof(OnMagazineReload));
+
+            if (!hasItems)
+                Unsubscribe(nameof(OnEntityBuilt));
+            else
+                Subscribe(nameof(OnEntityBuilt));
+        }
+
         #endregion
 
         #region Localization
+
         protected override void LoadDefaultMessages()
         {
             lang.RegisterMessages(new Dictionary<string, string>
@@ -201,200 +248,149 @@ namespace Oxide.Plugins
                 ["InvalidArgs"] = "Invalid syntax. Use /modernblocker help for details.",
                 ["Added"] = "Added {0} to {1} {2} list.",
                 ["Removed"] = "Removed {0} from {1} {2} list.",
+                ["NotFound"] = "{0} was not found in the {1} {2} list.",
                 ["ListHeader"] = "Permanent Items: {0}\nPermanent Clothes: {1}\nPermanent Ammo: {2}\nTimed Items: {3}\nTimed Clothes: {4}\nTimed Ammo: {5}",
                 ["Usage"] = "Usage:\n /modernblocker list - list all blocked items\n /modernblocker add <permanent|timed> <item|cloth|ammo> <name> - add an entry\n /modernblocker remove <permanent|timed> <item|cloth|ammo> <name> - remove an entry\n /modernblocker reload - reload configuration from disk\n /modernblocker loglist - display the last 20 log entries"
             }, this);
         }
 
         private string Msg(string key, BasePlayer player = null) => lang.GetMessage(key, this, player?.UserIDString);
+
         #endregion
 
-        #region Permissions Helpers
+        #region Permission Helpers
+
         private bool IsBypass(BasePlayer player) => permission.UserHasPermission(player.UserIDString, _config.BypassPermission);
         private bool IsAdmin(IPlayer player) => player.IsAdmin || permission.UserHasPermission(player.Id, _config.AdminPermission);
+
         #endregion
 
         #region Blocking Logic
-        private object CanEquipItem(PlayerInventory inventory, Item item)
-        {
-            var player = inventory.GetComponent<BasePlayer>();
-            if (player == null || IsNPC(player) || InDuel(player)) return null;
-            if (IsBypass(player)) return null;
-            var name = item.info.displayName.english;
-            var shortName = item.info.shortname;
-            // Permanent blocks
-            if (_permanentItems.Contains(name) || _permanentItems.Contains(shortName))
-            {
-                SendBlockMessage(player, "ItemBlocked", true);
-                // Log the blocked attempt
-                LogBlockAttempt(player, $"{name} ({shortName})", "item");
-                return false;
-            }
-            // Timed blocks
-            if (InTimedBlock && (_timedItems.Contains(name) || _timedItems.Contains(shortName)))
-            {
-                SendBlockMessage(player, "ItemBlocked", false);
-                // Log the blocked attempt
-                LogBlockAttempt(player, $"{name} ({shortName})", "item");
-                return false;
-            }
-            return null;
-        }
 
-        private object CanWearItem(PlayerInventory inventory, Item item)
+        /// <summary>
+        /// Checks if an item name or shortname appears in a permanent or timed block set.
+        /// Returns: true = permanently blocked, false = timed blocked, null = not blocked.
+        /// </summary>
+        private bool? CheckBlocked(string displayName, string shortName, HashSet<string> permanent, HashSet<string> timed)
         {
-            var player = inventory.GetComponent<BasePlayer>();
-            if (player == null || IsNPC(player) || InDuel(player)) return null;
-            if (IsBypass(player)) return null;
-            var name = item.info.displayName.english;
-            var shortName = item.info.shortname;
-            if (_permanentClothes.Contains(name) || _permanentClothes.Contains(shortName))
-            {
-                SendBlockMessage(player, "ClothBlocked", true);
-                // Log the blocked attempt
-                LogBlockAttempt(player, $"{name} ({shortName})", "clothing");
+            if (permanent.Contains(displayName) || permanent.Contains(shortName))
+                return true;
+            if (InTimedBlock && (timed.Contains(displayName) || timed.Contains(shortName)))
                 return false;
-            }
-            if (InTimedBlock && (_timedClothes.Contains(name) || _timedClothes.Contains(shortName)))
-            {
-                SendBlockMessage(player, "ClothBlocked", false);
-                // Log the blocked attempt
-                LogBlockAttempt(player, $"{name} ({shortName})", "clothing");
-                return false;
-            }
-            return null;
-        }
-
-        private object OnReloadMagazine(BasePlayer player, BaseProjectile projectile)
-        {
-            if (player == null || IsNPC(player) || InDuel(player)) return null;
-            if (IsBypass(player)) return null;
-            // Determine ammo type currently being loaded or used
-            Item ammoItem = null;
-            var ammoId = projectile.primaryMagazine.ammoType.itemid;
-            // Find the first item in the player's inventory that matches the ammo ID
-            var current = Facepunch.Pool.GetList<Item>();
-            try
-            {
-                // New API in recent Rust versions requires passing a List<Item> and the ID
-                player.inventory.FindItemsByItemID(current, ammoId);
-                if (current.Count > 0)
-                {
-                    ammoItem = current[0];
-                }
-                else
-                {
-                    // Fallback: search using FindAmmo for the types defined in the magazine definition
-                    var list = Facepunch.Pool.GetList<Item>();
-                    try
-                    {
-                        player.inventory.FindAmmo(list, projectile.primaryMagazine.definition.ammoTypes);
-                        if (list.Count > 0)
-                        {
-                            ammoItem = list[0];
-                        }
-                    }
-                    finally
-                    {
-                        Facepunch.Pool.FreeList(ref list);
-                    }
-                }
-            }
-            finally
-            {
-                Facepunch.Pool.FreeList(ref current);
-            }
-            if (ammoItem == null) return null;
-            var name = ammoItem.info.displayName.english;
-            var shortName = ammoItem.info.shortname;
-            if (_permanentAmmo.Contains(name) || _permanentAmmo.Contains(shortName))
-            {
-                SendBlockMessage(player, "AmmoBlocked", true);
-                // Log the blocked attempt
-                LogBlockAttempt(player, $"{name} ({shortName})", "ammunition");
-                return false;
-            }
-            if (InTimedBlock && (_timedAmmo.Contains(name) || _timedAmmo.Contains(shortName)))
-            {
-                SendBlockMessage(player, "AmmoBlocked", false);
-                // Log the blocked attempt
-                LogBlockAttempt(player, $"{name} ({shortName})", "ammunition");
-                return false;
-            }
             return null;
         }
 
         /// <summary>
-        /// New reload hook for recent Rust/Oxide versions. This mirrors the existing
-        /// OnReloadMagazine logic by delegating to that method. The new hook
-        /// receives the weapon instance, an ammo source (IAmmoContainer) and the
-        /// owner player. To maintain compatibility with older versions, the
-        /// original OnReloadMagazine hook is retained. When both hooks exist,
-        /// Oxide will call the most specific one available.
+        /// Common guard checks: returns true if the player should be allowed through (skip blocking).
         /// </summary>
-        /// <param name="instance">The projectile (weapon) being reloaded.</param>
-        /// <param name="ammoSource">The container providing the ammo; unused in this plugin.</param>
-        /// <param name="player">The player attempting to reload.</param>
-        /// <returns>False to block reloading of blocked ammo; null to allow.</returns>
-        private object OnMagazineReload(BaseProjectile instance, IAmmoContainer ammoSource, BasePlayer player)
+        private bool ShouldSkip(BasePlayer player)
         {
-            // Delegate to the legacy reload handler to reuse logic
-            return OnReloadMagazine(player, instance);
+            return player == null || IsNPC(player) || InDuel(player) || IsBypass(player);
         }
 
-        // Helpers to determine NPC or Duel contexts
-        // Generic duel plugin reference (e.g. Duelist)
+        // Updated signature for Oxide v2.0.7022+: adds int targetSlot parameter
+        private object CanEquipItem(PlayerInventory inventory, Item item, int targetSlot)
+        {
+            var player = inventory.GetBaseEntity() as BasePlayer;
+            if (ShouldSkip(player)) return null;
+
+            var displayName = item.info.displayName.english;
+            var shortName = item.info.shortname;
+            var blocked = CheckBlocked(displayName, shortName, _permanentItems, _timedItems);
+            if (blocked == null) return null;
+
+            SendBlockMessage(player, "ItemBlocked", blocked.Value);
+            LogBlockAttempt(player, $"{displayName} ({shortName})", "item");
+            return false;
+        }
+
+        // Updated signature for Oxide v2.0.7022+: adds int targetSlot parameter
+        private object CanWearItem(PlayerInventory inventory, Item item, int targetSlot)
+        {
+            var player = inventory.GetBaseEntity() as BasePlayer;
+            if (ShouldSkip(player)) return null;
+
+            var displayName = item.info.displayName.english;
+            var shortName = item.info.shortname;
+            var blocked = CheckBlocked(displayName, shortName, _permanentClothes, _timedClothes);
+            if (blocked == null) return null;
+
+            SendBlockMessage(player, "ClothBlocked", blocked.Value);
+            LogBlockAttempt(player, $"{displayName} ({shortName})", "clothing");
+            return false;
+        }
+
+        /// <summary>
+        /// Modern magazine reload hook (Oxide v2.0.7022+).
+        /// Reads ammo type directly from the weapon's magazine definition instead of
+        /// searching the player inventory, eliminating Pool allocations.
+        /// </summary>
+        private object OnMagazineReload(BaseProjectile instance, IAmmoContainer ammoSource, BasePlayer player)
+        {
+            if (ShouldSkip(player)) return null;
+
+            var ammoType = instance.primaryMagazine.ammoType;
+            if (ammoType == null) return null;
+
+            var displayName = ammoType.displayName.english;
+            var shortName = ammoType.shortname;
+            var blocked = CheckBlocked(displayName, shortName, _permanentAmmo, _timedAmmo);
+            if (blocked == null) return null;
+
+            SendBlockMessage(player, "AmmoBlocked", blocked.Value);
+            LogBlockAttempt(player, $"{displayName} ({shortName})", "ammunition");
+            return false;
+        }
+
+        #endregion
+
+        #region NPC & Duel Detection
+
         [PluginReference] private Plugin Duel;
-        // Duels Manager plugin reference. When present, this will be used to
-        // determine if a player is currently in a duel via the IsInDuel API
-        // documented on the Duels Manager plugin page【50364323406535†L68-L76】.
-        // Note: The Duels Manager API expects two Player arguments; we pass the
-        // same player twice as a best‑effort check. If a more specific API
-        // becomes available, this call can be updated accordingly.
         [PluginReference("DuelsManager")] private Plugin DuelsManager;
-        private bool IsNPC(BasePlayer player) => player is NPCPlayer || !(player.userID >= 76560000000000000L || player.userID <= 0L);
+
+        private bool IsNPC(BasePlayer player) =>
+            player is NPCPlayer || !(player.userID >= 76560000000000000UL || player.userID <= 0UL);
+
         private bool InDuel(BasePlayer player)
         {
-            // If the Duels Manager plugin is loaded, use its API.  The
-            // IsInDuel(Player, Player) call returns true if the specified
-            // players are currently duelling【50364323406535†L68-L76】.  Since we
-            // only have one player context here, we pass the same player as
-            // both parameters.  If Duels Manager is not installed or the call
-            // fails, fall back to the generic duel plugin.
             try
             {
                 if (DuelsManager != null)
                 {
-                    bool result = DuelsManager.Call<bool>("IsInDuel", player, player);
-                    if (result) return true;
+                    if (DuelsManager.Call<bool>("IsInDuel", player, player))
+                        return true;
                 }
             }
             catch
             {
-                // ignored – will fall back to generic duel plugin
+                // Ignored - fall through to generic duel plugin
             }
-            // Fall back to generic duel plugin (e.g. Duelist)
+
             try
             {
                 if (Duel != null)
-                {
                     return Duel.Call<bool>("IsPlayerOnActiveDuel", player);
-                }
             }
             catch
             {
                 // If call fails, treat as not in duel
             }
+
             return false;
         }
 
         #endregion
 
         #region Messaging
+
         private void SendBlockMessage(BasePlayer player, string messageKey, bool permanent)
         {
-            var prefix = $"<color={_config.ChatPrefixColor}>{_config.ChatPrefix}</color> ";
+            var safeColor = HexColorRegex.IsMatch(_config.ChatPrefixColor) ? _config.ChatPrefixColor : "#f44253";
+            var safePrefix = StripRichText(_config.ChatPrefix);
+            var prefix = $"<color={safeColor}>{safePrefix}</color> ";
             string message = Msg(messageKey, player);
+
             if (permanent)
             {
                 message += Msg("PermanentSuffix", player);
@@ -402,51 +398,47 @@ namespace Oxide.Plugins
             else
             {
                 var timeLeft = _blockEnd - DateTime.UtcNow;
-                message += string.Format(Msg("TimedSuffix", player), timeLeft.Days, timeLeft.Hours, timeLeft.Minutes, timeLeft.Seconds);
+                if (timeLeft.TotalSeconds < 0) timeLeft = TimeSpan.Zero;
+                message += string.Format(Msg("TimedSuffix", player),
+                    timeLeft.Days, timeLeft.Hours, timeLeft.Minutes, timeLeft.Seconds);
             }
+
             PrintToChat(player, prefix + message);
         }
+
+        /// <summary>
+        /// Strip Rich Text tags from a string to prevent markup injection.
+        /// </summary>
+        private static string StripRichText(string input) =>
+            string.IsNullOrEmpty(input) ? input : RichTextRegex.Replace(input, string.Empty);
 
         #endregion
 
         #region Logging
-        /// <summary>
-        /// Writes a log entry to the plugin's log file with a UTC timestamp.
-        /// </summary>
-        /// <param name="message">The message to log. Date/time will be prepended automatically.</param>
+
         private void LogAction(string message)
         {
-            // Prepend a timestamp for each log entry
             string entry = $"{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} | {message}";
             LogToFile(LogFileName, entry, this);
         }
 
-        /// <summary>
-        /// Logs an attempt by a player to use a blocked item, clothing, ammo or deployable.
-        /// Includes the player's display name, Steam ID and approximate position.
-        /// </summary>
-        /// <param name="player">The player attempting to use the item.</param>
-        /// <param name="itemName">The display name or shortname of the blocked item.</param>
-        /// <param name="category">The category of the blocked item (item, cloth, ammo, deployable).</param>
         private void LogBlockAttempt(BasePlayer player, string itemName, string category)
         {
             if (player == null) return;
             var pos = player.transform.position;
-            string log = $"{player.displayName} ({player.UserIDString}) attempted to use blocked {category} '{itemName}' at {pos.x:F1},{pos.y:F1},{pos.z:F1}";
-            LogAction(log);
+            LogAction($"{player.displayName} ({player.UserIDString}) attempted to use blocked {category} '{itemName}' at {pos.x:F1},{pos.y:F1},{pos.z:F1}");
         }
 
         #endregion
 
         #region Commands
-        // Chat command – accessible via in-game chat
+
         [ChatCommand("modernblocker")]
         private void ChatCommand(BasePlayer player, string command, string[] args)
         {
             ExecuteCommand(player.IPlayer, args);
         }
 
-        // Console command – accessible via RCON, server console or F1 client console
         [ConsoleCommand("modernblocker")]
         private void ConsoleCommand(ConsoleSystem.Arg arg)
         {
@@ -457,7 +449,6 @@ namespace Oxide.Plugins
 
         private void ExecuteCommand(IPlayer caller, string[] args)
         {
-            // If caller is null (e.g., RCON without player), treat as admin
             bool isAdmin = caller == null || IsAdmin(caller);
             if (!isAdmin)
             {
@@ -469,138 +460,138 @@ namespace Oxide.Plugins
                 caller?.Reply(Msg("Usage"));
                 return;
             }
-            var action = args[0].ToLower();
-            switch (action)
+
+            switch (args[0].ToLower())
             {
                 case "help":
                 case "usage":
                     caller?.Reply(Msg("Usage"));
                     break;
+
                 case "list":
                     SendLists(caller);
                     break;
+
                 case "add":
                 case "remove":
-                    if (args.Length < 4)
-                    {
-                        caller?.Reply(Msg("InvalidArgs"));
-                        return;
-                    }
-                    var type = args[1].ToLower(); // permanent or timed
-                    var category = args[2].ToLower(); // item, cloth, ammo
-                    var name = string.Join(" ", args.Skip(3));
-                    if (ModifyList(action == "add", type, category, name))
-                    {
-                        var status = action == "add" ? Msg("Added") : Msg("Removed");
-                        caller?.Reply(string.Format(status, name, type, category));
-                        SaveConfig();
-                        BuildHashSets();
-                        // Log the administrative action
-                        string actorName = caller?.Name ?? "Server";
-                        string actorId = caller?.Id ?? "Server";
-                        string logMessage = action == "add"
-                            ? $"{actorName} ({actorId}) added {name} to {type} {category} list"
-                            : $"{actorName} ({actorId}) removed {name} from {type} {category} list";
-                        LogAction(logMessage);
-                    }
-                    else
-                    {
-                        caller?.Reply(Msg("InvalidArgs"));
-                    }
+                    HandleModifyCommand(caller, args);
                     break;
+
                 case "reload":
                     LoadDataConfig();
                     BuildHashSets();
+                    SubscribeHooks();
                     caller?.Reply("ModernItemBlocker configuration reloaded from file.");
                     break;
 
                 case "loglist":
-                    {
-                        // Show the last 20 log lines to the caller
-                        try
-                        {
-                            // Build the path to the log file (oxide/logs/LogFileName.txt)
-                            string logsDir = Path.Combine(Interface.Oxide.RootDirectory, "oxide", "logs");
-                            string logFilePath = Path.Combine(logsDir, LogFileName + ".txt");
-                            if (!File.Exists(logFilePath))
-                            {
-                                caller?.Reply("No log file has been created yet.");
-                            }
-                            else
-                            {
-                                var lines = File.ReadAllLines(logFilePath);
-                                int count = lines.Length;
-                                int start = Math.Max(0, count - 20);
-                                var lastLines = lines.Skip(start);
-                                var response = string.Join("\n", lastLines);
-                                caller?.Reply(response);
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            caller?.Reply("Error reading log: " + ex.Message);
-                        }
-                        break;
-                    }
+                    HandleLogListCommand(caller);
+                    break;
+
                 default:
                     caller?.Reply(Msg("Usage"));
                     break;
             }
         }
 
+        private void HandleModifyCommand(IPlayer caller, string[] args)
+        {
+            if (args.Length < 4)
+            {
+                caller?.Reply(Msg("InvalidArgs"));
+                return;
+            }
+
+            bool isAdd = args[0].Equals("add", StringComparison.OrdinalIgnoreCase);
+            var type = args[1].ToLower();
+            var category = args[2].ToLower();
+            var name = string.Join(" ", args.Skip(3));
+
+            // Validate type and category before modifying
+            if (type != "permanent" && type != "timed")
+            {
+                caller?.Reply(Msg("InvalidArgs"));
+                return;
+            }
+            if (category != "item" && category != "items" && category != "cloth" &&
+                category != "clothes" && category != "clothing" && category != "ammo")
+            {
+                caller?.Reply(Msg("InvalidArgs"));
+                return;
+            }
+
+            if (ModifyList(isAdd, type, category, name))
+            {
+                var status = isAdd ? Msg("Added") : Msg("Removed");
+                caller?.Reply(string.Format(status, name, type, category));
+                SaveConfig();
+                BuildHashSets();
+                SubscribeHooks();
+
+                string actorName = caller?.Name ?? "Server";
+                string actorId = caller?.Id ?? "Server";
+                string verb = isAdd ? "added" : "removed";
+                string prep = isAdd ? "to" : "from";
+                LogAction($"{actorName} ({actorId}) {verb} {name} {prep} {type} {category} list");
+            }
+            else
+            {
+                caller?.Reply(Msg("InvalidArgs"));
+            }
+        }
+
+        private void HandleLogListCommand(IPlayer caller)
+        {
+            try
+            {
+                string logsDir = Path.Combine(Interface.Oxide.RootDirectory, "oxide", "logs");
+                string logFilePath = Path.Combine(logsDir, LogFileName + ".txt");
+
+                // Ensure resolved path stays within the logs directory (path traversal guard)
+                string resolvedPath = Path.GetFullPath(logFilePath);
+                string resolvedLogsDir = Path.GetFullPath(logsDir);
+                if (!resolvedPath.StartsWith(resolvedLogsDir, StringComparison.OrdinalIgnoreCase))
+                {
+                    caller?.Reply("Invalid log file path.");
+                    return;
+                }
+
+                if (!File.Exists(logFilePath))
+                {
+                    caller?.Reply("No log file has been created yet.");
+                    return;
+                }
+
+                var lines = File.ReadAllLines(logFilePath);
+                int start = Math.Max(0, lines.Length - 20);
+                caller?.Reply(string.Join("\n", lines.Skip(start)));
+            }
+            catch (Exception ex)
+            {
+                caller?.Reply("Error reading log: " + ex.Message);
+            }
+        }
+
         private void SendLists(IPlayer caller)
         {
-            string permItems = _config.PermanentBlockedItems.Count > 0 ? string.Join(", ", _config.PermanentBlockedItems) : "<none>";
-            string permClothes = _config.PermanentBlockedClothes.Count > 0 ? string.Join(", ", _config.PermanentBlockedClothes) : "<none>";
-            string permAmmo = _config.PermanentBlockedAmmo.Count > 0 ? string.Join(", ", _config.PermanentBlockedAmmo) : "<none>";
-            string timedItems = _config.TimedBlockedItems.Count > 0 ? string.Join(", ", _config.TimedBlockedItems) : "<none>";
-            string timedClothes = _config.TimedBlockedClothes.Count > 0 ? string.Join(", ", _config.TimedBlockedClothes) : "<none>";
-            string timedAmmo = _config.TimedBlockedAmmo.Count > 0 ? string.Join(", ", _config.TimedBlockedAmmo) : "<none>";
-            caller?.Reply(string.Format(Msg("ListHeader"), permItems, permClothes, permAmmo, timedItems, timedClothes, timedAmmo));
+            string FormatList(List<string> list) =>
+                list.Count > 0 ? string.Join(", ", list) : "<none>";
+
+            caller?.Reply(string.Format(Msg("ListHeader"),
+                FormatList(_config.PermanentBlockedItems),
+                FormatList(_config.PermanentBlockedClothes),
+                FormatList(_config.PermanentBlockedAmmo),
+                FormatList(_config.TimedBlockedItems),
+                FormatList(_config.TimedBlockedClothes),
+                FormatList(_config.TimedBlockedAmmo)));
         }
 
         private bool ModifyList(bool add, string type, string category, string name)
         {
-            List<string> targetList = null;
-            switch (type)
-            {
-                case "permanent":
-                    switch (category)
-                    {
-                        case "item":
-                        case "items":
-                            targetList = _config.PermanentBlockedItems;
-                            break;
-                        case "cloth":
-                        case "clothes":
-                        case "clothing":
-                            targetList = _config.PermanentBlockedClothes;
-                            break;
-                        case "ammo":
-                            targetList = _config.PermanentBlockedAmmo;
-                            break;
-                    }
-                    break;
-                case "timed":
-                    switch (category)
-                    {
-                        case "item":
-                        case "items":
-                            targetList = _config.TimedBlockedItems;
-                            break;
-                        case "cloth":
-                        case "clothes":
-                        case "clothing":
-                            targetList = _config.TimedBlockedClothes;
-                            break;
-                        case "ammo":
-                            targetList = _config.TimedBlockedAmmo;
-                            break;
-                    }
-                    break;
-            }
+            var targetList = GetTargetList(type, category);
             if (targetList == null)
                 return false;
+
             if (add)
             {
                 if (!targetList.Contains(name, StringComparer.OrdinalIgnoreCase))
@@ -613,46 +604,71 @@ namespace Oxide.Plugins
             return true;
         }
 
-        // Hook called when an entity is built (structure or deployable).
-        // This is used to log placement attempts of items that are on the blocked lists.
+        private List<string> GetTargetList(string type, string category)
+        {
+            switch (type)
+            {
+                case "permanent":
+                    switch (category)
+                    {
+                        case "item":
+                        case "items":
+                            return _config.PermanentBlockedItems;
+                        case "cloth":
+                        case "clothes":
+                        case "clothing":
+                            return _config.PermanentBlockedClothes;
+                        case "ammo":
+                            return _config.PermanentBlockedAmmo;
+                    }
+                    break;
+                case "timed":
+                    switch (category)
+                    {
+                        case "item":
+                        case "items":
+                            return _config.TimedBlockedItems;
+                        case "cloth":
+                        case "clothes":
+                        case "clothing":
+                            return _config.TimedBlockedClothes;
+                        case "ammo":
+                            return _config.TimedBlockedAmmo;
+                    }
+                    break;
+            }
+            return null;
+        }
+
+        #endregion
+
+        #region Entity Built Hook
+
         private void OnEntityBuilt(Planner plan, GameObject go)
         {
             try
             {
                 var player = plan?.GetOwnerPlayer();
-                if (player == null || IsNPC(player) || InDuel(player)) return;
-                // Respect bypass permission: do not log for bypass players
-                if (IsBypass(player)) return;
+                if (ShouldSkip(player)) return;
 
-                // Attempt to determine the prefab and item names
                 var entity = go.GetComponent<BaseEntity>();
                 if (entity == null) return;
+
                 string prefabName = entity.ShortPrefabName;
-                // Look up the item definition by prefab short name (if available)
                 var itemDef = ItemManager.FindItemDefinition(prefabName);
                 string displayName = itemDef?.displayName?.english ?? prefabName;
                 string shortName = itemDef?.shortname ?? prefabName;
-                bool blocked = false;
-                if (_permanentItems.Contains(displayName) || _permanentItems.Contains(shortName))
-                {
-                    blocked = true;
-                }
-                else if (InTimedBlock && (_timedItems.Contains(displayName) || _timedItems.Contains(shortName)))
-                {
-                    blocked = true;
-                }
-                if (blocked)
-                {
-                    // Log the deployment attempt; category 'deployable' covers any placed entity
+
+                var blocked = CheckBlocked(displayName, shortName, _permanentItems, _timedItems);
+                if (blocked != null)
                     LogBlockAttempt(player, $"{displayName} ({shortName})", "deployable");
-                }
             }
             catch (Exception ex)
             {
-                // Ensure that logging failures do not affect gameplay
                 PrintError($"Error in OnEntityBuilt: {ex.Message}");
             }
         }
+
         #endregion
     }
 }

@@ -1,10 +1,10 @@
 {
   "name": "ModernItemBlocker",
   "title": "Modern Item Blocker",
-  "version": "3.0.8",
+  "version": "4.0.0",
   "author": "gjdunga",
   "license": "MIT",
-  "description": "Blocks items, clothing and ammunition temporarily after a wipe or permanently until removed. Provides admin commands, logging, optional duelling integration and permission-based control.",
+  "description": "Blocks items, clothing and ammunition temporarily after a wipe or permanently until removed. Compatible with Oxide v2.0.7022+ and the Rust Naval Update. Provides admin commands, logging, optional duelling integration and permission-based control.",
   "games": ["rust"],
   "language": "csharp",
   "website": "https://github.com/gjdunga/ModernItemBlocker",
