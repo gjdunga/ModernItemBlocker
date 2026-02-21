@@ -1,0 +1,16 @@
+{
+  "ItemBlocked":     "Hoc instrumento uti non licet.",
+  "ClothBlocked":    "Hanc vestem induere non licet.",
+  "AmmoBlocked":     "Hoc telo uti non licet.",
+  "BuildBlocked":    "Hoc aedificium ponere non licet.",
+  "TimedSuffix":     "\n{0}d {1:00}:{2:00}:{3:00} manent donec reseretur.",
+  "PermanentSuffix": "\nHoc instrumentum perpetuo obstructum est donec ab administratore removeatur.",
+  "NotAllowed":      "Non habes potestatem hoc mandatum usurpandi.",
+  "InvalidArgs":     "Syntaxis erronea. Utere /modernblocker help ad auxilium.",
+  "NameTooLong":     "Nomen instrumenti nimis longum est (maximum 256 litterae).",
+  "Added":           "'{0}' in indicem {1} {2} additus est.",
+  "Removed":         "'{0}' ex indice {1} {2} remotus est.",
+  "NotFound":        "'{0}' in indice {1} {2} non inventus est.",
+  "ListHeader":      "Instrumenta perpetuo obstructa: {0}\nVestes perpetuo obstructae: {1}\nTela perpetuo obstructa: {2}\nInstrumenta temporarie obstructa: {3}\nVestes temporarie obstructae: {4}\nTela temporarie obstructa: {5}",
+  "Usage":           "Usus:\n /modernblocker list\n /modernblocker add <permanent|timed> <item|cloth|ammo> <nomen>\n /modernblocker remove <permanent|timed> <item|cloth|ammo> <nomen>\n /modernblocker reload\n /modernblocker loglist"
+}
