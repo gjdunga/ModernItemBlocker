@@ -1,6 +1,6 @@
 name: Modern Item Blocker
 author: gjdunga
-version: 4.1.1
+version: 4.1.2
 description: |
   Blocks items, clothing, ammunition and deployables temporarily after a wipe or permanently until removed.
   Provides admin commands via chat, console (including RCON) with configurable permissions.
