@@ -5,13 +5,20 @@
   "author": "gjdunga",
   "license": "MIT",
   "description": "Blocks items, clothing, ammunition and deployables temporarily after a wipe or permanently until removed. Compatible with Oxide v2.0.7022+ and the Rust Naval Update. Provides admin commands, logging, optional duelling integration and permission-based control.",
-  "games": ["rust"],
+  "games": [
+    "rust"
+  ],
   "language": "csharp",
   "website": "https://github.com/gjdunga/ModernItemBlocker",
   "source": "https://github.com/gjdunga/ModernItemBlocker",
   "documentation": "https://github.com/gjdunga/ModernItemBlocker#readme",
   "issues": "https://github.com/gjdunga/ModernItemBlocker/issues",
-  "categories": ["Items", "Permissions", "Administration", "Quality of Life"],
+  "categories": [
+    "Items",
+    "Permissions",
+    "Administration",
+    "Quality of Life"
+  ],
   "permissions": [
     {
       "name": "modernitemblocker.bypass",
@@ -31,16 +38,46 @@
   ],
   "compatibility": {
     "oxide": ">=2.0.7022",
-    "game_versions": ["latest"]
+    "game_versions": [
+      "latest"
+    ]
   },
   "files": [
-    { "path": "ModernItemBlocker.cs",                        "role": "plugin" },
-    { "path": "oxide/data/ModernItemBlockerConfig.json",     "role": "config-sample" },
-    { "path": "oxide/lang/en/ModernItemBlocker.json",        "role": "lang-en" },
-    { "path": "LICENSE.md",                                  "role": "license" },
-    { "path": "README.md",                                   "role": "readme" },
-    { "path": ".umod.yaml",                                  "role": "umod-metadata" },
-    { "path": "manifest.json",                               "role": "manifest" },
-    { "path": "changelog.md",                                "role": "changelog" }
+    {
+      "path": "ModernItemBlocker.cs",
+      "role": "plugin"
+    },
+    {
+      "path": "oxide/plugins/ModernItemBlocker.cs",
+      "role": "plugin-mirror"
+    },
+    {
+      "path": "oxide/data/ModernItemBlockerConfig.json",
+      "role": "config-sample"
+    },
+    {
+      "path": "oxide/lang/en/ModernItemBlocker.json",
+      "role": "lang-en"
+    },
+    {
+      "path": "LICENSE.md",
+      "role": "license"
+    },
+    {
+      "path": "README.md",
+      "role": "readme"
+    },
+    {
+      "path": ".umod.yaml",
+      "role": "umod-metadata"
+    },
+    {
+      "path": "manifest.json",
+      "role": "manifest"
+    },
+    {
+      "path": "changelog.md",
+      "role": "changelog"
+    }
   ]
 }
