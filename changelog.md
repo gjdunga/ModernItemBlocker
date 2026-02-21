@@ -1,3 +1,61 @@
+## 4.1.3 - Unload Hook / InDuel Logging / Log Tail Fix / Languages / Structure Cleanup
+
+### Security Fixes
+
+- **`Unload()` hook added**: Oxide automatically unsubscribes hooks when a plugin
+  unloads, but an explicit `Unsubscribe` pass in `Unload()` prevents late-arriving
+  events from dispatching into a partially-torn-down instance.  All six HashSets are
+  also cleared in `Unload()` to release object references for immediate GC rather
+  than waiting for the next collection cycle.
+
+- **`InDuel()` exception logging**: Both duelling plugin call-sites previously used
+  empty `catch { }` blocks, silently swallowing all exceptions.  A plugin API
+  mismatch (wrong signature, version change) would cause the block check to always
+  pass `InDuel() == false`, granting implicit duel-bypass to all players without any
+  server-side indication that something was wrong.  Each catch block now calls
+  `PrintWarning(pluginName + " call failed: " + ex.Message)` so operators can
+  diagnose duel plugin compatibility issues from the console log.
+
+- **`HandleLogListCommand()` tail-read replaces `File.ReadAllLines()`**:
+  `File.ReadAllLines()` loads the entire file into memory before splitting.  On a
+  busy server the daily log can reach tens of megabytes; a single `loglist` command
+  would allocate that entire buffer.  The new implementation opens a `FileStream`,
+  seeks to `max(0, fileLength - 64KB)` from the end, reads only that tail slice,
+  splits into lines, and returns the last 20.  Memory cost is capped at
+  `LogTailMaxBytes` (64 KB) regardless of log file size.
+
+- **`ConsoleCommand()` null-string guard for `FindPlayerById`**: When `arg.Connection`
+  is null (server console or bare RCON call), `arg.Connection?.userid.ToString()`
+  evaluates to `null`.  Some Covalence backend implementations throw
+  `ArgumentNullException` on a null ID string rather than returning `null` gracefully.
+  The call now passes `string.Empty` as the fallback: `arg.Connection?.userid.ToString()
+  ?? string.Empty`.
+
+### Verified No-Op (No Code Change Required)
+
+- **No `(bool, DateTime?, bool)?` value tuples were present in the codebase**.
+  `CheckBlocked` returns `bool?` (a simple `Nullable<bool>`), which does not depend
+  on `System.ValueTuple` and builds correctly on all Oxide build servers.  The audit
+  is documented here to confirm the check was performed.
+
+### Additions
+
+- **Russian (`ru`), Spanish (`es`), and Latin (`la`) language files** added to
+  `oxide/lang/`.  All three cover every lang key defined in `LoadDefaultMessages()`.
+
+### Repository Structure
+
+- **`ModernItemBlocker.cs` removed from repository root**.  The canonical plugin
+  path for umod submission is `oxide/plugins/ModernItemBlocker.cs`.  A duplicate
+  root copy violated the umod structure requirement ("no .cs code in the root") and
+  could cause confusion about which copy is authoritative.
+
+- **`manifest.json` updated**: removed the now-deleted `plugin-mirror` root entry,
+  added lang entries for `ru`, `es`, and `la`.  `oxide/plugins/ModernItemBlocker.cs`
+  is now the sole `plugin` role entry.
+
+---
+
 ## 4.1.2 - Security Hardening / Info Title Fix / Null Guard in CheckBlocked
 
 ### Security Fixes
