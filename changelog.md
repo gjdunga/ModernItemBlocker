@@ -1,3 +1,56 @@
+## 4.1.1 - Security Hardening / NULL-list Guard / Version Corrections
+
+### Security Fixes
+
+- **Log injection prevention**: `player.displayName` and item names are now sanitised
+  via a `SanitizeLog` helper before being written to the audit log.  Characters that
+  could forge a new log line (`\n`, `\r`) or corrupt the pipe-delimited format (`|`)
+  are replaced with a space.  Previously a player named
+  `\n2099-01-01 00:00:00 | ADMIN fake_entry` could inject arbitrary lines into the
+  audit trail.
+
+- **Null list guard**: `ValidateConfig` now null-coerces all six block-list fields
+  using `??=`.  A config file containing `"Permanent Blocked Items": null` (or any
+  list set to JSON null) previously caused `BuildHashSets` to throw
+  `NullReferenceException` on startup, preventing the plugin from loading.  The
+  plugin now replaces null fields with empty lists and continues normally.
+
+- **Item name length cap**: The `add`/`remove` command parser now rejects names
+  longer than 256 characters.  Arbitrarily long names could bloat the config file
+  and log entries to any size.  A new `NameTooLong` lang key provides feedback.
+
+- **Rich Text stripped from list output**: `SendLists` now runs `StripRichText` on
+  every entry before including it in the chat reply.  Previously a stored entry
+  containing `<color=red>text</color>` would render as coloured markup in chat.
+
+### Bug Fixes
+
+- **Spurious `SaveConfig()` removed from `OnNewSave`**: `_blockEnd` is a runtime
+  field and is not persisted in the config file; it is recomputed from
+  `SaveRestore.SaveCreatedTime` on every server start.  Calling `SaveConfig()` on
+  wipe was a no-op that wrote an unchanged config to disk and misleadingly implied
+  that the wipe timestamp was being serialised.
+
+- **README minimum Oxide version corrected**: Installation section previously stated
+  `v2.0.6599`; the plugin actually requires `v2.0.7022+` (Rust Naval Update hook
+  signatures).
+
+### Additions
+
+- `oxide/lang/en/ModernItemBlocker.json` shipped in the repository so operators can
+  see all translatable keys without reading source code.
+
+- `NameTooLong` lang key added (used by the new name-length cap).
+
+### Repository / Metadata
+
+- `.umod.yaml`: `tags` field added (`items`, `administration`, `permissions`,
+  `wipe`, `blocker`).
+- `manifest.json`: `compatibility.oxide` corrected from `"2.x"` to `">=2.0.7022"`.
+  `oxide/lang/en/ModernItemBlocker.json` added to `files` list.
+
+---
+
 ## 4.1.0 - Deployable Blocking Fix / Log Read Fix / Remove Feedback Fix
 
 ### Bug Fixes
