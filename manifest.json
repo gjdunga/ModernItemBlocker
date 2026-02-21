@@ -1,10 +1,10 @@
 {
   "name": "ModernItemBlocker",
   "title": "Modern Item Blocker",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "author": "gjdunga",
   "license": "MIT",
-  "description": "Blocks items, clothing and ammunition temporarily after a wipe or permanently until removed. Compatible with Oxide v2.0.7022+ and the Rust Naval Update. Provides admin commands, logging, optional duelling integration and permission-based control.",
+  "description": "Blocks items, clothing, ammunition and deployables temporarily after a wipe or permanently until removed. Compatible with Oxide v2.0.7022+ and the Rust Naval Update. Provides admin commands, logging, optional duelling integration and permission-based control.",
   "games": ["rust"],
   "language": "csharp",
   "website": "https://github.com/gjdunga/ModernItemBlocker",
@@ -15,18 +15,18 @@
   "permissions": [
     {
       "name": "modernitemblocker.bypass",
-      "description": "Exempts the user from all block checks."
+      "description": "Exempts the player from all block checks."
     },
     {
       "name": "modernitemblocker.admin",
-      "description": "Allows access to all administrative commands for managing blocked items."
+      "description": "Grants access to all /modernblocker administrative commands."
     }
   ],
   "commands": [
     {
       "command": "modernblocker",
       "arguments": "[list|add|remove|reload|loglist] [permanent|timed] [item|cloth|ammo] [name]",
-      "description": "Chat, console or RCON command for listing blocked items, adding or removing entries, reloading configuration or viewing the last 20 log entries."
+      "description": "Chat, console or RCON command for listing blocked entries, adding or removing items, reloading configuration, or viewing the last 20 log lines."
     }
   ],
   "compatibility": {
@@ -34,11 +34,12 @@
     "game_versions": ["latest"]
   },
   "files": [
-    { "path": "ModernItemBlocker.cs", "role": "plugin" },
-    { "path": "LICENSE.md", "role": "license" },
-    { "path": "README.md", "role": "readme" },
-    { "path": "ModernItemBlockerConfig.json", "role": "config-sample" },
-    { "path": ".umod.yaml", "role": "umod-metadata" },
-    { "path": "manifest.json", "role": "manifest" }
+    { "path": "ModernItemBlocker.cs",         "role": "plugin" },
+    { "path": "LICENSE.md",                   "role": "license" },
+    { "path": "README.md",                    "role": "readme" },
+    { "path": "oxide/data/ModernItemBlockerConfig.json", "role": "config-sample" },
+    { "path": ".umod.yaml",                   "role": "umod-metadata" },
+    { "path": "manifest.json",                "role": "manifest" },
+    { "path": "changelog.md",                 "role": "changelog" }
   ]
 }
