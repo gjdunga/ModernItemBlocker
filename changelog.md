@@ -1,3 +1,42 @@
+## 4.1.2 - Security Hardening / Info Title Fix / Null Guard in CheckBlocked
+
+### Security Fixes
+
+- **[Info] title corrected to "Modern Item Blocker"**: The umod style guide requires
+  plugin titles in the `[Info]` attribute to use human-readable, space-separated words
+  so the name renders correctly in the Oxide server console.  The previous value
+  `"ModernItemBlocker"` (no spaces) violated this requirement.
+
+- **SanitizeLog now strips all ASCII control characters**: The previous implementation
+  only replaced `\n`, `\r`, and `|`.  Null bytes (`\x00`), BEL (`\x07`), DEL (`\x7F`),
+  and other control characters in the range 0x00-0x1F could still be injected into log
+  files, corrupting automated parsers and terminal emulators.  A single compiled Regex
+  (`[\x00-\x1F\x7F|]`) now replaces the entire control-character range and the pipe
+  delimiter in one pass, replacing all matches with a space.
+
+- **Null guard added in CheckBlocked for displayName and shortName**: Custom or modded
+  items can return a null `displayName.english` string.  Passing `null` to
+  `HashSet<string>.Contains` throws `ArgumentNullException`.  Both names are now
+  null-coerced to `string.Empty` before the HashSet lookups.
+
+### Bug Fix
+
+- **SendLists empty-list placeholder changed from `<none>` to `(none)`**: Unity's Rich
+  Text renderer parses `<none>` as an unknown markup tag and may silently discard it,
+  producing blank output when a list is empty.  Parentheses are unambiguous plain text.
+
+### Repository
+
+- `oxide/lang/en/ModernItemBlocker.json` actually added to repository (was listed in
+  manifest and mentioned in the 4.1.1 changelog as shipped, but was absent from the repo).
+- `oxide/data/ModernItemBlockerConfig.json` sample added to repository (was listed in
+  manifest but absent from the repo).
+- `manifest.json` `files` list: removed the `oxide/plugins/ModernItemBlocker.cs`
+  plugin-mirror entry (the file is not present in the repo; the canonical path is
+  `ModernItemBlocker.cs` at the repository root).
+
+---
+
 ## 4.1.1 - Security Hardening / NULL-list Guard / Version Corrections
 
 ### Security Fixes
@@ -37,7 +76,7 @@
 
 ### Additions
 
-- `oxide/lang/en/ModernItemBlocker.json` shipped in the repository so operators can
+- `oxide/lang/en/ModernItemBlocker.json` added to repository listing so operators can
   see all translatable keys without reading source code.
 
 - `NameTooLong` lang key added (used by the new name-length cap).
