@@ -1,5 +1,5 @@
 /*
- * ModernItemBlocker  v4.1.1
+ * ModernItemBlocker  v4.1.2
  * Author : gjdunga
  * License: MIT
  *
@@ -17,6 +17,23 @@
  *   CanWearItem      (PlayerInventory, Item, int targetSlot)
  *   OnMagazineReload (BaseProjectile, IAmmoContainer, BasePlayer)
  *   CanBuild         (Planner, Construction, Construction.Target)
+ *
+ * CHANGES IN 4.1.2
+ * ----------------
+ *   SECURITY : [Info] title corrected from "ModernItemBlocker" to "Modern Item Blocker"
+ *              to comply with the umod style guide requirement for human-readable,
+ *              space-separated plugin titles in the console.
+ *   SECURITY : SanitizeLog now strips all ASCII control characters (0x00-0x1F and 0x7F)
+ *              in addition to the pipe delimiter (|).  Previously only \n and \r were
+ *              removed; null bytes and other control chars could still corrupt log
+ *              parsers.  A compiled Regex replaces the manual char.Replace chain.
+ *   SECURITY : Null guard added in CheckBlocked for displayName and shortName.
+ *              Custom or modded items can have a null displayName.english string;
+ *              passing null to HashSet.Contains throws ArgumentNullException.  Both
+ *              names are now replaced with an empty string when null.
+ *   FIX      : SendLists empty-list placeholder changed from "<none>" to "(none)".
+ *              The angle brackets in "<none>" are parsed by Unity's Rich Text renderer
+ *              as an unknown tag and may be silently dropped, producing blank output.
  *
  * CHANGES IN 4.1.1
  * ----------------
@@ -72,7 +89,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("ModernItemBlocker", "gjdunga", "4.1.1")]
+    [Info("Modern Item Blocker", "gjdunga", "4.1.2")]
     [Description("Blocks items, clothing, ammunition and deployables temporarily after a wipe or permanently until removed. Compatible with Oxide v2.0.7022+ and the Rust Naval Update.")]
     public class ModernItemBlocker : RustPlugin
     {
@@ -116,6 +133,16 @@ namespace Oxide.Plugins
         /// </summary>
         private static readonly Regex RichTextRegex =
             new Regex(@"<[^>]+>", RegexOptions.Compiled);
+
+        /// <summary>
+        /// Matches all ASCII control characters (0x00-0x1F, 0x7F) and the pipe character
+        /// used as log field delimiter.  All matches are replaced with a space by SanitizeLog.
+        ///
+        /// Control characters beyond \n and \r (e.g. null bytes, BEL, DEL) can corrupt
+        /// log file parsers and terminal emulators; this regex eliminates the entire range.
+        /// </summary>
+        private static readonly Regex SanitizeLogRegex =
+            new Regex(@"[\x00-\x1F\x7F|]", RegexOptions.Compiled);
 
         // ---------------------------------------------------------------
         //  Cached validated state (populated in ValidateConfig / Init)
@@ -407,12 +434,12 @@ namespace Oxide.Plugins
         /// </summary>
         private void BuildHashSets()
         {
-            _timedItems      = new HashSet<string>(_config.TimedBlockedItems,       StringComparer.OrdinalIgnoreCase);
-            _timedClothes    = new HashSet<string>(_config.TimedBlockedClothes,     StringComparer.OrdinalIgnoreCase);
-            _timedAmmo       = new HashSet<string>(_config.TimedBlockedAmmo,        StringComparer.OrdinalIgnoreCase);
-            _permanentItems  = new HashSet<string>(_config.PermanentBlockedItems,   StringComparer.OrdinalIgnoreCase);
-            _permanentClothes= new HashSet<string>(_config.PermanentBlockedClothes, StringComparer.OrdinalIgnoreCase);
-            _permanentAmmo   = new HashSet<string>(_config.PermanentBlockedAmmo,    StringComparer.OrdinalIgnoreCase);
+            _timedItems       = new HashSet<string>(_config.TimedBlockedItems,       StringComparer.OrdinalIgnoreCase);
+            _timedClothes     = new HashSet<string>(_config.TimedBlockedClothes,     StringComparer.OrdinalIgnoreCase);
+            _timedAmmo        = new HashSet<string>(_config.TimedBlockedAmmo,        StringComparer.OrdinalIgnoreCase);
+            _permanentItems   = new HashSet<string>(_config.PermanentBlockedItems,   StringComparer.OrdinalIgnoreCase);
+            _permanentClothes = new HashSet<string>(_config.PermanentBlockedClothes, StringComparer.OrdinalIgnoreCase);
+            _permanentAmmo    = new HashSet<string>(_config.PermanentBlockedAmmo,    StringComparer.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -564,7 +591,7 @@ namespace Oxide.Plugins
                 ["Removed"]         = "Removed '{0}' from the {1} {2} list.",
                 ["NotFound"]        = "'{0}' was not found in the {1} {2} list.",
                 ["ListHeader"]      = "Permanent Items: {0}\nPermanent Clothes: {1}\nPermanent Ammo: {2}\nTimed Items: {3}\nTimed Clothes: {4}\nTimed Ammo: {5}",
-                ["Usage"]           = "Usage:\n /modernblocker list\n /modernblocker add <permanent|timed> <item|cloth|ammo> <name>\n /modernblocker remove <permanent|timed> <item|cloth|ammo> <name>\n /modernblocker reload\n /modernblocker loglist"
+                ["Usage"]           = "Usage:\n /modernblocker list\n /modernblocker add <permanent|timed> <item|cloth|ammo> <n>\n /modernblocker remove <permanent|timed> <item|cloth|ammo> <n>\n /modernblocker reload\n /modernblocker loglist"
             }, this);
         }
 
@@ -613,14 +640,18 @@ namespace Oxide.Plugins
         ///
         /// Permanent blocks take priority over timed blocks.  Timed blocks are only
         /// evaluated when InTimedBlock is true (i.e. within the post-wipe window).
+        ///
+        /// Security: displayName and shortName are null-coerced to string.Empty.
+        /// Custom or modded items can have a null displayName.english; passing null
+        /// to HashSet.Contains throws ArgumentNullException.
         /// </summary>
         /// <param name="displayName">
         /// The English display name of the item, e.g. "Assault Rifle".
-        /// Sourced from item.info.displayName.english.
+        /// Sourced from item.info.displayName.english.  May be null for custom items.
         /// </param>
         /// <param name="shortName">
         /// The engine shortname of the item, e.g. "rifle.ak".
-        /// Sourced from item.info.shortname.
+        /// Sourced from item.info.shortname.  May be null for custom items.
         /// </param>
         /// <param name="permanent">HashSet of permanently blocked names for this category.</param>
         /// <param name="timed">HashSet of timed-block names for this category.</param>
@@ -633,9 +664,13 @@ namespace Oxide.Plugins
             string displayName, string shortName,
             HashSet<string> permanent, HashSet<string> timed)
         {
-            if (permanent.Contains(displayName) || permanent.Contains(shortName))
+            // Null-coerce: custom/modded items may have null display names.
+            var dn = displayName ?? string.Empty;
+            var sn = shortName  ?? string.Empty;
+
+            if (permanent.Contains(dn) || permanent.Contains(sn))
                 return true;
-            if (InTimedBlock && (timed.Contains(displayName) || timed.Contains(shortName)))
+            if (InTimedBlock && (timed.Contains(dn) || timed.Contains(sn)))
                 return false;
             return null;
         }
@@ -905,27 +940,29 @@ namespace Oxide.Plugins
         //
         //  Security: all user-controlled strings (player display names, item names)
         //  are passed through SanitizeLog before being written.  This removes
-        //  newline characters (\n, \r) that could inject fake log lines and pipe
-        //  characters (|) that could corrupt the pipe-delimited log format.
+        //  all ASCII control characters (0x00-0x1F, 0x7F) and pipe characters (|)
+        //  that could corrupt the pipe-delimited log format or terminal renderers.
         // ===================================================================
         #region Logging
 
         /// <summary>
         /// Sanitises a user-controlled string for safe inclusion in a log line.
         ///
-        /// Characters removed:
-        ///   \n  - newline; would split into a new log line
-        ///   \r  - carriage return; same risk on Windows-style line endings
-        ///   |   - pipe; used as the field delimiter in log lines
+        /// Characters replaced with a space:
+        ///   0x00-0x1F  All ASCII control characters including \n, \r, \t, BEL, NUL.
+        ///              Control characters can split log lines, corrupt terminal output,
+        ///              and confuse automated log parsers.
+        ///   0x7F       DEL character; may corrupt terminal display.
+        ///   |          Field delimiter used in pipe-delimited log entries.
         ///
-        /// This prevents a player naming themselves "\n2099-01-01 00:00:00 | ADMIN ..."
-        /// from injecting a forged audit entry into the log file.
+        /// A single compiled Regex replaces the prior chain of char.Replace calls and
+        /// covers the full control-character range in one pass.
+        ///
+        /// Example threat: a player named "\n2099-01-01 00:00:00 | ADMIN fake_entry"
+        /// would inject a forged audit line into the log file without this sanitiser.
         /// </summary>
-        private static string SanitizeLog(string input)
-        {
-            if (string.IsNullOrEmpty(input)) return input;
-            return input.Replace('\n', ' ').Replace('\r', ' ').Replace('|', ' ');
-        }
+        private static string SanitizeLog(string input) =>
+            string.IsNullOrEmpty(input) ? input : SanitizeLogRegex.Replace(input, " ");
 
         /// <summary>
         /// Writes a timestamped log entry.
@@ -1070,14 +1107,12 @@ namespace Oxide.Plugins
             var  category = args[2].ToLowerInvariant();
             var  name     = string.Join(" ", args.Skip(3)).Trim();
 
-            // Validate type token.
             if (type != "permanent" && type != "timed")
             {
                 caller?.Reply(Msg("InvalidArgs"));
                 return;
             }
 
-            // Validate category token.
             if (category != "item"    && category != "items"   &&
                 category != "cloth"   && category != "clothes" &&
                 category != "clothing"&& category != "ammo")
@@ -1086,14 +1121,12 @@ namespace Oxide.Plugins
                 return;
             }
 
-            // Reject empty names.
             if (string.IsNullOrEmpty(name))
             {
                 caller?.Reply(Msg("InvalidArgs"));
                 return;
             }
 
-            // Cap name length to prevent log and config bloat.
             if (name.Length > MaxNameLength)
             {
                 caller?.Reply(Msg("NameTooLong"));
@@ -1122,7 +1155,6 @@ namespace Oxide.Plugins
             BuildHashSets();
             SubscribeHooks();
 
-            // Sanitize caller name and id before logging (prevents log injection).
             var actorName = SanitizeLog(caller?.Name ?? "Server");
             var actorId   = caller?.Id ?? "Server";
             LogAction(
@@ -1188,12 +1220,16 @@ namespace Oxide.Plugins
         /// Item names in the lists are stripped of Rich Text tags before being
         /// included in the reply.  This prevents a stored name containing &lt;color&gt;
         /// or similar markup from rendering as formatted text in chat.
+        ///
+        /// Empty lists display as "(none)" rather than "&lt;none&gt;".  Angle brackets
+        /// in the original placeholder were parsed by Unity's Rich Text renderer as
+        /// an unknown tag and could be silently dropped, producing blank output.
         /// </summary>
         private void SendLists(IPlayer caller)
         {
             string FormatList(List<string> list)
             {
-                if (list.Count == 0) return "<none>";
+                if (list.Count == 0) return "(none)";
                 return string.Join(", ", list.Select(StripRichText));
             }
 
