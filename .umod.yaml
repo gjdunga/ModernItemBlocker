@@ -1,6 +1,6 @@
 name: Modern Item Blocker
 author: gjdunga
-version: 4.1.0
+version: 4.1.1
 description: |
   Blocks items, clothing, ammunition and deployables temporarily after a wipe or permanently until removed.
   Provides admin commands via chat, console (including RCON) with configurable permissions.
@@ -8,3 +8,9 @@ description: |
 language: C#
 game: rust
 license: MIT
+tags:
+  - items
+  - administration
+  - permissions
+  - wipe
+  - blocker
