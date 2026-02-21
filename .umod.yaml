@@ -1,9 +1,10 @@
 name: Modern Item Blocker
 author: gjdunga
-version: 4.0.0
+version: 4.1.0
 description: |
-  Blocks items, clothing and ammunition temporarily after a wipe or permanently until removed.
-  Provides admin commands via chat, console (including RCON) and UI with configurable permissions.
+  Blocks items, clothing, ammunition and deployables temporarily after a wipe or permanently until removed.
+  Provides admin commands via chat, console (including RCON) with configurable permissions.
+  Compatible with Oxide v2.0.7022+ and the Rust Naval Update.
 language: C#
 game: rust
 license: MIT
