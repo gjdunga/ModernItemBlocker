@@ -1,5 +1,5 @@
 /*
- * ModernItemBlocker  v4.1.2
+ * ModernItemBlocker  v4.1.3
  * Author : gjdunga
  * License: MIT
  *
@@ -17,6 +17,40 @@
  *   CanWearItem      (PlayerInventory, Item, int targetSlot)
  *   OnMagazineReload (BaseProjectile, IAmmoContainer, BasePlayer)
  *   CanBuild         (Planner, Construction, Construction.Target)
+ *
+ * CHANGES IN 4.1.3
+ * ----------------
+ *   VERIFIED  : No (bool, DateTime?, bool)? value tuples were present in the
+ *               codebase.  CheckBlocked returns bool? (simple nullable bool)
+ *               which compiles correctly on all Oxide build servers without
+ *               System.ValueTuple.  No code change required for this item.
+ *   SECURITY  : Unload() hook added.  Oxide automatically unsubscribes hooks
+ *               on plugin unload, but an explicit Unsubscribe pass in Unload()
+ *               prevents any hook firing against a partially-torn-down instance
+ *               in rare race conditions (e.g., late CanBuild events arriving
+ *               while Oxide is removing the plugin).  All six HashSets are also
+ *               cleared to release references early.
+ *   SECURITY  : InDuel() now calls PrintWarning() on caught exceptions instead
+ *               of silently swallowing them.  Silent catch blocks mask real
+ *               failures (e.g., wrong plugin API, version mismatch) making
+ *               debugging nearly impossible.  The warning includes the plugin
+ *               name and exception message without a stack trace to keep server
+ *               console output readable.
+ *   SECURITY  : HandleLogListCommand() replaced File.ReadAllLines() with a
+ *               tail-read using FileStream + StreamReader.  ReadAllLines() loads
+ *               the entire file into memory; on a busy server the daily log can
+ *               reach tens of MB.  The new reader seeks from the end of the file
+ *               and reads only enough bytes to collect 20 lines, capped at 64 KB
+ *               to bound worst-case memory use absolutely.
+ *   FIX       : ConsoleCommand() now passes string.Empty (not null) to
+ *               FindPlayerById when arg.Connection is null.  FindPlayerById
+ *               on some Covalence backends throws on a null-string argument
+ *               rather than returning null gracefully.
+ *   ADD       : Russian (ru), Spanish (es), and Latin (la) lang files added to
+ *               oxide/lang/.
+ *   STRUCTURE : ModernItemBlocker.cs removed from repository root.  The canonical
+ *               path for Oxide plugins is oxide/plugins/; a duplicate root copy
+ *               violated the umod submission structure requirement.
  *
  * CHANGES IN 4.1.2
  * ----------------
@@ -84,12 +118,13 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Modern Item Blocker", "gjdunga", "4.1.2")]
+    [Info("Modern Item Blocker", "gjdunga", "4.1.3")]
     [Description("Blocks items, clothing, ammunition and deployables temporarily after a wipe or permanently until removed. Compatible with Oxide v2.0.7022+ and the Rust Naval Update.")]
     public class ModernItemBlocker : RustPlugin
     {
@@ -115,6 +150,12 @@ namespace Oxide.Plugins
         /// prevent config and log file bloat.
         /// </summary>
         private const int MaxNameLength = 256;
+
+        /// <summary>
+        /// Maximum byte count read from the end of a log file by HandleLogListCommand.
+        /// Caps worst-case memory allocation at 64 KB regardless of log file size.
+        /// </summary>
+        private const int LogTailMaxBytes = 65536;
 
         // ---------------------------------------------------------------
         //  Compiled regexes (allocated once at class load time)
@@ -508,6 +549,33 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
+        /// Called by Oxide when the plugin is unloaded (oxide.unload, server restart,
+        /// or hot-reload).
+        ///
+        /// Explicitly unsubscribes all four hooks to prevent late-arriving events from
+        /// dispatching into a partially-torn-down plugin instance.  Oxide's hook
+        /// dispatcher is usually correct, but the explicit pass closes any race window
+        /// between event queuing and plugin teardown.
+        ///
+        /// Clears all six HashSets to release object references and allow GC to reclaim
+        /// memory immediately rather than waiting for the next full GC cycle.
+        /// </summary>
+        private void Unload()
+        {
+            Unsubscribe(nameof(CanEquipItem));
+            Unsubscribe(nameof(CanWearItem));
+            Unsubscribe(nameof(OnMagazineReload));
+            Unsubscribe(nameof(CanBuild));
+
+            _timedItems?.Clear();
+            _timedClothes?.Clear();
+            _timedAmmo?.Clear();
+            _permanentItems?.Clear();
+            _permanentClothes?.Clear();
+            _permanentAmmo?.Clear();
+        }
+
+        /// <summary>
         /// Oxide hook fired when a new save file is created, signalling a wipe.
         ///
         /// Resets _blockEnd to now + BlockDurationHours so the full timed-block
@@ -566,7 +634,7 @@ namespace Oxide.Plugins
         //
         //  All player-facing strings are registered via the Oxide Lang API.
         //  Operators can override these by editing oxide/lang/en/ModernItemBlocker.json
-        //  or by creating parallel files for other language codes.
+        //  or by creating parallel files for other language codes (ru, es, la, etc.).
         // ===================================================================
         #region Localization
 
@@ -638,12 +706,21 @@ namespace Oxide.Plugins
         /// Determines whether an item identified by display name or shortname should
         /// be blocked, and whether that block is permanent or timed.
         ///
+        /// Return value semantics (bool?):
+        ///   true  = item is permanently blocked.
+        ///   false = item is timed-blocked (InTimedBlock is true and name is in timed set).
+        ///   null  = item is not blocked by any active rule.
+        ///
         /// Permanent blocks take priority over timed blocks.  Timed blocks are only
         /// evaluated when InTimedBlock is true (i.e. within the post-wipe window).
         ///
-        /// Security: displayName and shortName are null-coerced to string.Empty.
-        /// Custom or modded items can have a null displayName.english; passing null
-        /// to HashSet.Contains throws ArgumentNullException.
+        /// NOTE: This method returns a simple nullable bool (bool?), NOT a value tuple.
+        /// System.ValueTuple is not required and the code builds on all Oxide build
+        /// servers without additional assembly references.
+        ///
+        /// Security: displayName and shortName are null-coerced to string.Empty before
+        /// HashSet lookups.  Custom or modded items can return a null displayName.english
+        /// string; passing null to HashSet.Contains throws ArgumentNullException.
         /// </summary>
         /// <param name="displayName">
         /// The English display name of the item, e.g. "Assault Rifle".
@@ -655,16 +732,10 @@ namespace Oxide.Plugins
         /// </param>
         /// <param name="permanent">HashSet of permanently blocked names for this category.</param>
         /// <param name="timed">HashSet of timed-block names for this category.</param>
-        /// <returns>
-        /// true  = item is permanently blocked.
-        /// false = item is timed-blocked (InTimedBlock is true and name is in timed set).
-        /// null  = item is not blocked by any active rule.
-        /// </returns>
         private bool? CheckBlocked(
             string displayName, string shortName,
             HashSet<string> permanent, HashSet<string> timed)
         {
-            // Null-coerce: custom/modded items may have null display names.
             var dn = displayName ?? string.Empty;
             var sn = shortName  ?? string.Empty;
 
@@ -678,8 +749,7 @@ namespace Oxide.Plugins
         /// <summary>
         /// Returns true if block checks should be skipped for this player entirely.
         ///
-        /// The following conditions all result in a skip (short-circuit order matters
-        /// for performance: cheap checks first):
+        /// Short-circuit evaluation order (cheap checks first):
         ///   1. player is null (defensive; callers should filter before calling)
         ///   2. player is an NPC
         ///   3. player is currently in an active duel (requires a duel plugin)
@@ -691,27 +761,22 @@ namespace Oxide.Plugins
         // ---------------------------------------------------------------
         //  Hook: CanEquipItem
         //  Signature introduced in Oxide v2.0.7022 (Rust Naval Update).
-        //  The targetSlot parameter is unused by this plugin but required
-        //  for Oxide to match the correct hook overload.
+        //  The targetSlot parameter is unused but required for hook matching.
         // ---------------------------------------------------------------
 
         /// <summary>
         /// Oxide hook fired when a player attempts to equip an item.
-        /// Returns false to cancel the equip action when the item is blocked.
-        /// Returns null to allow the action.
+        /// Returns false to cancel; null to allow.
         /// </summary>
         private object CanEquipItem(PlayerInventory inventory, Item item, int targetSlot)
         {
             if (item?.info == null) return null;
-
             var player = inventory?.GetBaseEntity() as BasePlayer;
             if (ShouldSkip(player)) return null;
 
             var blocked = CheckBlocked(
-                item.info.displayName.english,
-                item.info.shortname,
+                item.info.displayName.english, item.info.shortname,
                 _permanentItems, _timedItems);
-
             if (blocked == null) return null;
 
             SendBlockMessage(player, "ItemBlocked", blocked.Value);
@@ -726,21 +791,17 @@ namespace Oxide.Plugins
 
         /// <summary>
         /// Oxide hook fired when a player attempts to equip a clothing item.
-        /// Returns false to cancel the wear action when the clothing is blocked.
-        /// Returns null to allow the action.
+        /// Returns false to cancel; null to allow.
         /// </summary>
         private object CanWearItem(PlayerInventory inventory, Item item, int targetSlot)
         {
             if (item?.info == null) return null;
-
             var player = inventory?.GetBaseEntity() as BasePlayer;
             if (ShouldSkip(player)) return null;
 
             var blocked = CheckBlocked(
-                item.info.displayName.english,
-                item.info.shortname,
+                item.info.displayName.english, item.info.shortname,
                 _permanentClothes, _timedClothes);
-
             if (blocked == null) return null;
 
             SendBlockMessage(player, "ClothBlocked", blocked.Value);
@@ -750,28 +811,23 @@ namespace Oxide.Plugins
 
         // ---------------------------------------------------------------
         //  Hook: OnMagazineReload
-        //  Introduced in Oxide v2.0.7022.  Reads ammo type directly from the
-        //  weapon's magazine definition, avoiding Facepunch Pool allocations
-        //  that the legacy OnReloadMagazine hook required.
+        //  Introduced in Oxide v2.0.7022.  Reads ammo type from the magazine
+        //  definition, avoiding Facepunch Pool allocations.
         // ---------------------------------------------------------------
 
         /// <summary>
         /// Oxide hook fired when a player's weapon begins a magazine reload cycle.
-        /// Returns false to cancel the reload when the ammunition type is blocked.
-        /// Returns null to allow the action.
+        /// Returns false to cancel; null to allow.
         /// </summary>
         private object OnMagazineReload(BaseProjectile instance, IAmmoContainer ammoSource, BasePlayer player)
         {
             if (ShouldSkip(player)) return null;
-
             var ammoType = instance?.primaryMagazine?.ammoType;
             if (ammoType == null) return null;
 
             var blocked = CheckBlocked(
-                ammoType.displayName.english,
-                ammoType.shortname,
+                ammoType.displayName.english, ammoType.shortname,
                 _permanentAmmo, _timedAmmo);
-
             if (blocked == null) return null;
 
             SendBlockMessage(player, "AmmoBlocked", blocked.Value);
@@ -781,22 +837,14 @@ namespace Oxide.Plugins
 
         // ---------------------------------------------------------------
         //  Hook: CanBuild
-        //  Fires BEFORE entity placement.  Returning a non-null value cancels
-        //  the build without spawning the entity.
-        //
-        //  This replaces the former OnEntityBuilt hook, which fired AFTER an
-        //  entity was already placed; returning false from OnEntityBuilt was a
-        //  no-op and deployable blocking was silently non-functional in <= 4.0.0.
+        //  Fires BEFORE entity placement.  Returning non-null cancels build.
+        //  Replaces the former OnEntityBuilt hook (which fired AFTER placement;
+        //  returning false was a no-op in <= 4.0.0).
         // ---------------------------------------------------------------
 
         /// <summary>
         /// Oxide hook fired when a player attempts to place a deployable item.
-        /// Returns false to cancel the placement before the entity is spawned.
-        /// Returns null to allow the action.
-        ///
-        /// The planner's source item carries the item definition, so deployable
-        /// blocking reuses the items block lists (e.g. "large.box" blocks the
-        /// Large Wood Box deployable).
+        /// Returns false to cancel before entity spawn; null to allow.
         /// </summary>
         private object CanBuild(Planner planner, Construction prefab, Construction.Target target)
         {
@@ -807,10 +855,8 @@ namespace Oxide.Plugins
             if (item?.info == null) return null;
 
             var blocked = CheckBlocked(
-                item.info.displayName.english,
-                item.info.shortname,
+                item.info.displayName.english, item.info.shortname,
                 _permanentItems, _timedItems);
-
             if (blocked == null) return null;
 
             SendBlockMessage(player, "BuildBlocked", blocked.Value);
@@ -848,32 +894,45 @@ namespace Oxide.Plugins
 
         /// <summary>
         /// Returns true if the player is currently engaged in an active duel via a
-        /// supported duelling plugin.
+        /// supported duelling plugin (DuelsManager or Duel).
         ///
-        /// Plugin calls are wrapped in try/catch so a failure in either duelling
-        /// plugin does not propagate and crash the block-check hot path.
+        /// Each plugin call is wrapped in a try/catch.  On exception, a warning is
+        /// printed to the Oxide console so operators can diagnose API mismatches
+        /// rather than silently ignoring failures that would bypass blocking for all
+        /// players.
         ///
         /// Detection order:
         ///   1. DuelsManager.IsInDuel(player, player)
         ///   2. Duel.IsPlayerOnActiveDuel(player)
         ///
-        /// If neither plugin is installed this method always returns false.
+        /// Returns false when neither plugin is installed.
         /// </summary>
         private bool InDuel(BasePlayer player)
         {
-            try
+            if (DuelsManager != null)
             {
-                if (DuelsManager != null && DuelsManager.Call<bool>("IsInDuel", player, player))
-                    return true;
+                try
+                {
+                    if (DuelsManager.Call<bool>("IsInDuel", player, player))
+                        return true;
+                }
+                catch (Exception ex)
+                {
+                    PrintWarning($"DuelsManager.IsInDuel call failed: {ex.Message}");
+                }
             }
-            catch { /* plugin call failed; proceed to next check */ }
 
-            try
+            if (Duel != null)
             {
-                if (Duel != null)
+                try
+                {
                     return Duel.Call<bool>("IsPlayerOnActiveDuel", player);
+                }
+                catch (Exception ex)
+                {
+                    PrintWarning($"Duel.IsPlayerOnActiveDuel call failed: {ex.Message}");
+                }
             }
-            catch { /* plugin call failed */ }
 
             return false;
         }
@@ -888,18 +947,17 @@ namespace Oxide.Plugins
         /// <summary>
         /// Sends a block notification to the player in chat.
         ///
-        /// The prefix is composed from _safeColor and _safePrefix, both cached at
-        /// load time by ValidateConfig, so no regex or format validation runs here.
+        /// The prefix uses _safeColor and _safePrefix, both cached at load time by
+        /// ValidateConfig, so no regex or validation executes in this hot path.
         ///
-        /// If the block is timed, the remaining time until unblock is appended using
-        /// the TimedSuffix lang key.  The countdown is clamped to zero so a race
-        /// between block expiry and a hook invocation never produces a negative time.
+        /// If the block is timed, the remaining countdown is clamped to zero so a
+        /// race between block expiry and a hook invocation never yields negative time.
         /// </summary>
         /// <param name="player">The player who attempted to use the blocked item.</param>
         /// <param name="messageKey">Lang key for the category-specific base message.</param>
         /// <param name="permanent">
-        /// true  = append PermanentSuffix (no countdown needed).
-        /// false = append TimedSuffix with remaining time countdown.
+        /// true  = append PermanentSuffix.
+        /// false = append TimedSuffix with countdown.
         /// </param>
         private void SendBlockMessage(BasePlayer player, string messageKey, bool permanent)
         {
@@ -935,13 +993,11 @@ namespace Oxide.Plugins
         // ===================================================================
         //  REGION: Logging
         //
-        //  Oxide's LogToFile helper appends _YYYY-MM-DD.txt to the provided
-        //  base name, producing e.g. oxide/logs/ModernItemBlocker_2025-06-01.txt.
+        //  Oxide's LogToFile helper appends _YYYY-MM-DD.txt to the base name,
+        //  producing e.g. oxide/logs/ModernItemBlocker_2025-06-01.txt.
         //
         //  Security: all user-controlled strings (player display names, item names)
-        //  are passed through SanitizeLog before being written.  This removes
-        //  all ASCII control characters (0x00-0x1F, 0x7F) and pipe characters (|)
-        //  that could corrupt the pipe-delimited log format or terminal renderers.
+        //  are passed through SanitizeLog before writing.
         // ===================================================================
         #region Logging
 
@@ -950,35 +1006,24 @@ namespace Oxide.Plugins
         ///
         /// Characters replaced with a space:
         ///   0x00-0x1F  All ASCII control characters including \n, \r, \t, BEL, NUL.
-        ///              Control characters can split log lines, corrupt terminal output,
-        ///              and confuse automated log parsers.
-        ///   0x7F       DEL character; may corrupt terminal display.
-        ///   |          Field delimiter used in pipe-delimited log entries.
+        ///   0x7F       DEL character.
+        ///   |          Pipe field delimiter used in log entries.
         ///
-        /// A single compiled Regex replaces the prior chain of char.Replace calls and
-        /// covers the full control-character range in one pass.
-        ///
-        /// Example threat: a player named "\n2099-01-01 00:00:00 | ADMIN fake_entry"
-        /// would inject a forged audit line into the log file without this sanitiser.
+        /// Threat example: a player named "\n2099-01-01 00:00:00 | ADMIN fake_entry"
+        /// would inject a forged audit line without this sanitiser.
         /// </summary>
         private static string SanitizeLog(string input) =>
             string.IsNullOrEmpty(input) ? input : SanitizeLogRegex.Replace(input, " ");
 
         /// <summary>
-        /// Writes a timestamped log entry.
-        /// The timestamp is in ISO 8601 UTC format (yyyy-MM-dd HH:mm:ss).
-        /// The message is separated from the timestamp by " | " for easy parsing.
+        /// Writes a timestamped log entry in ISO 8601 UTC format, pipe-separated.
         /// </summary>
         private void LogAction(string message) =>
             LogToFile(LogFileName, $"{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} | {message}", this);
 
         /// <summary>
-        /// Logs a single block event.
-        ///
-        /// The log entry includes the player's display name, Steam ID, the blocked
-        /// item's display name and shortname, the item category, and the player's
-        /// approximate world coordinates (F1 precision, ~0.1 m).
-        ///
+        /// Logs a single block event with player name, Steam ID, item names,
+        /// category, and player world coordinates.
         /// All user-controlled strings are sanitised by SanitizeLog before writing.
         /// </summary>
         private void LogBlockAttempt(BasePlayer player, string displayName, string shortName, string category)
@@ -1009,16 +1054,20 @@ namespace Oxide.Plugins
         /// <summary>
         /// Console / RCON command: modernblocker [subcommand] [args...]
         ///
-        /// Attempts to resolve the caller to an IPlayer.  If the command originates
-        /// from the server console (no connection), iplayer will be null; ExecuteCommand
-        /// treats a null caller as the server console and grants admin access implicitly.
+        /// Resolves the caller to IPlayer.  Passes string.Empty (not null) to
+        /// FindPlayerById when arg.Connection is null; some Covalence backends throw
+        /// ArgumentNullException on a null ID string rather than returning null.
+        ///
+        /// A null iplayer reaching ExecuteCommand is treated as the server console
+        /// and is implicitly granted admin access.
         /// </summary>
         [ConsoleCommand("modernblocker")]
         private void ConsoleCommand(ConsoleSystem.Arg arg)
         {
             var caller  = arg.Player();
             IPlayer iplayer = caller?.IPlayer
-                ?? covalence.Players.FindPlayerById(arg.Connection?.userid.ToString());
+                ?? covalence.Players.FindPlayerById(
+                       arg.Connection?.userid.ToString() ?? string.Empty);
             ExecuteCommand(iplayer, arg.Args);
         }
 
@@ -1087,12 +1136,10 @@ namespace Oxide.Plugins
         ///   args[2] = "item", "items", "cloth", "clothes", "clothing", or "ammo"
         ///   args[3..] = item name (joined with spaces, may be multi-word)
         ///
-        /// Security: item names are capped at MaxNameLength (256) characters.
-        /// Empty names (after trimming) are rejected.
-        ///
-        /// On success, the config list is mutated, persisted to disk, and the
-        /// in-memory HashSets and hook subscriptions are updated atomically.
-        /// The action is also written to the audit log.
+        /// Security: item names are capped at MaxNameLength (256) characters and
+        /// must be non-empty after trimming.  On success the config list is mutated,
+        /// persisted to disk, and the in-memory HashSets and hook subscriptions are
+        /// updated.  The action is written to the audit log.
         /// </summary>
         private void HandleModifyCommand(IPlayer caller, string[] args)
         {
@@ -1167,10 +1214,14 @@ namespace Oxide.Plugins
         ///
         /// Oxide creates date-suffixed log files (ModernItemBlocker_YYYY-MM-DD.txt).
         /// This command globs for ModernItemBlocker_*.txt, sorts by last-write time,
-        /// and reads the most recent file.
+        /// and reads the tail of the most recent file.
         ///
-        /// Security: all candidate file paths are resolved with Path.GetFullPath and
-        /// compared against the resolved logs directory to prevent path traversal.
+        /// Security:
+        ///   * All candidate file paths are resolved with Path.GetFullPath and compared
+        ///     against the resolved logs directory to prevent path traversal.
+        ///   * The file is read in reverse from its end rather than loading it entirely
+        ///     into memory.  Reading is capped at LogTailMaxBytes (64 KB) regardless of
+        ///     log file size, bounding worst-case memory allocation absolutely.
         /// </summary>
         private void HandleLogListCommand(IPlayer caller)
         {
@@ -1192,9 +1243,10 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                // Path traversal guard: resolve each path and confirm it stays inside logsDir.
+                // Path traversal guard: keep only paths that resolve inside logsDir.
                 var safePaths = files
-                    .Where(f => Path.GetFullPath(f).StartsWith(resolvedDir, StringComparison.OrdinalIgnoreCase))
+                    .Where(f => Path.GetFullPath(f)
+                        .StartsWith(resolvedDir, StringComparison.OrdinalIgnoreCase))
                     .ToArray();
 
                 if (safePaths.Length == 0)
@@ -1204,8 +1256,22 @@ namespace Oxide.Plugins
                 }
 
                 var logFile = safePaths.OrderByDescending(File.GetLastWriteTimeUtc).First();
-                var lines   = File.ReadAllLines(logFile);
-                var start   = Math.Max(0, lines.Length - 20);
+
+                // Tail-read: seek from end of file, read at most LogTailMaxBytes bytes,
+                // then split into lines and return the last 20.  This avoids loading
+                // multi-MB log files into memory for a 20-line tail request.
+                string tail;
+                using (var fs = new FileStream(logFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                {
+                    long readLen = Math.Min(fs.Length, LogTailMaxBytes);
+                    fs.Seek(-readLen, SeekOrigin.End);
+                    var buf = new byte[readLen];
+                    int read = fs.Read(buf, 0, buf.Length);
+                    tail = Encoding.UTF8.GetString(buf, 0, read);
+                }
+
+                var lines = tail.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+                var start = Math.Max(0, lines.Length - 20);
                 caller?.Reply(string.Join("\n", lines.Skip(start)));
             }
             catch (Exception ex)
@@ -1216,14 +1282,9 @@ namespace Oxide.Plugins
 
         /// <summary>
         /// Formats and sends all six block lists to the caller.
-        ///
-        /// Item names in the lists are stripped of Rich Text tags before being
-        /// included in the reply.  This prevents a stored name containing &lt;color&gt;
-        /// or similar markup from rendering as formatted text in chat.
-        ///
-        /// Empty lists display as "(none)" rather than "&lt;none&gt;".  Angle brackets
-        /// in the original placeholder were parsed by Unity's Rich Text renderer as
-        /// an unknown tag and could be silently dropped, producing blank output.
+        /// Item names are stripped of Rich Text tags before inclusion to prevent
+        /// stored markup from rendering as formatted text in chat.
+        /// Empty lists display as "(none)" (not "&lt;none&gt;").
         /// </summary>
         private void SendLists(IPlayer caller)
         {
@@ -1254,12 +1315,11 @@ namespace Oxide.Plugins
         /// Adds or removes <paramref name="name"/> from the config list identified
         /// by the (type, category) pair.
         ///
-        /// Add: uses a case-insensitive duplicate check before inserting so the
-        /// same name cannot appear twice with different capitalisation.
+        /// Add: case-insensitive duplicate check before inserting prevents the same
+        /// name appearing twice with different capitalisation.
         ///
-        /// Remove: uses RemoveAll with a case-insensitive comparer so all
-        /// capitalisation variants of the same name are removed in one pass.
-        /// Returns NotFound if no entry matched.
+        /// Remove: RemoveAll with case-insensitive comparer removes all capitalisation
+        /// variants in one pass.  Returns NotFound when no entry matched.
         /// </summary>
         private ModifyResult ModifyList(bool add, string type, string category, string name)
         {
@@ -1281,14 +1341,7 @@ namespace Oxide.Plugins
 
         /// <summary>
         /// Maps a (type, category) pair to the corresponding config List.
-        ///
-        /// Accepts the following category aliases:
-        ///   item | items       -> Items list
-        ///   cloth | clothes | clothing -> Clothes list
-        ///   ammo              -> Ammo list
-        ///
-        /// Returns null for any unrecognised combination so callers can detect
-        /// invalid input without catching an exception.
+        /// Returns null for any unrecognised combination.
         /// </summary>
         private List<string> GetTargetList(string type, string category)
         {
