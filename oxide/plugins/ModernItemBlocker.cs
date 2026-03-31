@@ -1,5 +1,5 @@
 /*
- * ModernItemBlocker  v4.1.3
+ * ModernItemBlocker  v4.1.4
  * Author : gjdunga
  * License: MIT
  *
@@ -17,6 +17,26 @@
  *   CanWearItem      (PlayerInventory, Item, int targetSlot)
  *   OnMagazineReload (BaseProjectile, IAmmoContainer, BasePlayer)
  *   CanBuild         (Planner, Construction, Construction.Target)
+ *
+ * Verified compatible with Oxide 2.0.7182 (current as of 2026-03-25).
+ * No hook signature changes affecting this plugin were introduced between
+ * 2.0.7022 and 2.0.7182.
+ *
+ * CHANGES IN 4.1.4
+ * ----------------
+ *   FIX : Null-coerce item names in hook handlers before passing to
+ *         LogBlockAttempt.  In 4.1.2 null guards were added to CheckBlocked
+ *         so that null displayName.english values from custom or modded items
+ *         do not throw ArgumentNullException during HashSet lookups.  However,
+ *         each hook handler read displayName.english a second time when calling
+ *         LogBlockAttempt, after CheckBlocked had already confirmed a block.
+ *         If displayName.english was null, SanitizeLog received null and
+ *         returned null, and string interpolation in LogBlockAttempt produced
+ *         the literal text "null" in the log entry rather than an empty string.
+ *         The fix extracts displayName and shortname into local variables at the
+ *         top of each block in each hook handler.  Both CheckBlocked and
+ *         LogBlockAttempt now receive the same already-coerced values, closing
+ *         the inconsistency without duplicating the null-coerce logic.
  *
  * CHANGES IN 4.1.3
  * ----------------
@@ -124,7 +144,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Modern Item Blocker", "gjdunga", "4.1.3")]
+    [Info("Modern Item Blocker", "gjdunga", "4.1.4")]
     [Description("Blocks items, clothing, ammunition and deployables temporarily after a wipe or permanently until removed. Compatible with Oxide v2.0.7022+ and the Rust Naval Update.")]
     public class ModernItemBlocker : RustPlugin
     {
@@ -774,13 +794,17 @@ namespace Oxide.Plugins
             var player = inventory?.GetBaseEntity() as BasePlayer;
             if (ShouldSkip(player)) return null;
 
-            var blocked = CheckBlocked(
-                item.info.displayName.english, item.info.shortname,
-                _permanentItems, _timedItems);
+            // Extract names once.  Both CheckBlocked and LogBlockAttempt receive the
+            // same values so a null displayName.english (possible on custom items) is
+            // coerced to string.Empty in one place rather than separately by each callee.
+            var dn = item.info.displayName.english ?? string.Empty;
+            var sn = item.info.shortname           ?? string.Empty;
+
+            var blocked = CheckBlocked(dn, sn, _permanentItems, _timedItems);
             if (blocked == null) return null;
 
             SendBlockMessage(player, "ItemBlocked", blocked.Value);
-            LogBlockAttempt(player, item.info.displayName.english, item.info.shortname, "item");
+            LogBlockAttempt(player, dn, sn, "item");
             return false;
         }
 
@@ -799,13 +823,14 @@ namespace Oxide.Plugins
             var player = inventory?.GetBaseEntity() as BasePlayer;
             if (ShouldSkip(player)) return null;
 
-            var blocked = CheckBlocked(
-                item.info.displayName.english, item.info.shortname,
-                _permanentClothes, _timedClothes);
+            var dn = item.info.displayName.english ?? string.Empty;
+            var sn = item.info.shortname           ?? string.Empty;
+
+            var blocked = CheckBlocked(dn, sn, _permanentClothes, _timedClothes);
             if (blocked == null) return null;
 
             SendBlockMessage(player, "ClothBlocked", blocked.Value);
-            LogBlockAttempt(player, item.info.displayName.english, item.info.shortname, "clothing");
+            LogBlockAttempt(player, dn, sn, "clothing");
             return false;
         }
 
@@ -825,13 +850,14 @@ namespace Oxide.Plugins
             var ammoType = instance?.primaryMagazine?.ammoType;
             if (ammoType == null) return null;
 
-            var blocked = CheckBlocked(
-                ammoType.displayName.english, ammoType.shortname,
-                _permanentAmmo, _timedAmmo);
+            var dn = ammoType.displayName.english ?? string.Empty;
+            var sn = ammoType.shortname           ?? string.Empty;
+
+            var blocked = CheckBlocked(dn, sn, _permanentAmmo, _timedAmmo);
             if (blocked == null) return null;
 
             SendBlockMessage(player, "AmmoBlocked", blocked.Value);
-            LogBlockAttempt(player, ammoType.displayName.english, ammoType.shortname, "ammunition");
+            LogBlockAttempt(player, dn, sn, "ammunition");
             return false;
         }
 
@@ -854,13 +880,14 @@ namespace Oxide.Plugins
             var item = planner?.GetItem();
             if (item?.info == null) return null;
 
-            var blocked = CheckBlocked(
-                item.info.displayName.english, item.info.shortname,
-                _permanentItems, _timedItems);
+            var dn = item.info.displayName.english ?? string.Empty;
+            var sn = item.info.shortname           ?? string.Empty;
+
+            var blocked = CheckBlocked(dn, sn, _permanentItems, _timedItems);
             if (blocked == null) return null;
 
             SendBlockMessage(player, "BuildBlocked", blocked.Value);
-            LogBlockAttempt(player, item.info.displayName.english, item.info.shortname, "deployable");
+            LogBlockAttempt(player, dn, sn, "deployable");
             return false;
         }
 
@@ -1370,3 +1397,4 @@ namespace Oxide.Plugins
         #endregion
     }
 }
+

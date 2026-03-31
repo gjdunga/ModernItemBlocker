@@ -1,3 +1,28 @@
+## 4.1.4 - Log Name Null-Coerce Fix
+
+### Bug Fix
+
+- **Item name double-read eliminated in hook handlers**: `CheckBlocked` received null
+  guards for `displayName.english` and `shortname` in 4.1.2 so that custom or modded
+  items with a null display name do not throw `ArgumentNullException` during HashSet
+  lookups.  However, each hook handler (`CanEquipItem`, `CanWearItem`,
+  `OnMagazineReload`, `CanBuild`) read those fields a second time when passing them
+  to `LogBlockAttempt`.  On a custom item with a null `displayName.english`,
+  `SanitizeLog` received null, returned null, and string interpolation produced the
+  literal text `"null"` in the audit log entry rather than an empty string.
+
+  The fix extracts `displayName.english` and `shortname` into local `dn` / `sn`
+  variables at the top of each block in each hook handler, null-coercing to
+  `string.Empty` at that point.  Both `CheckBlocked` and `LogBlockAttempt` then
+  receive the same already-coerced values.  The null-coerce logic in `CheckBlocked`
+  itself is retained as a defence-in-depth guard for any future callers.
+
+### Compatibility
+
+- Verified compatible with Oxide 2.0.7182 (2026-03-25).  No hook signature changes
+  affecting `CanEquipItem`, `CanWearItem`, `OnMagazineReload`, or `CanBuild` were
+  introduced between 2.0.7022 and 2.0.7182.
+
 ## 4.1.3 - Unload Hook / InDuel Logging / Log Tail Fix / Languages / Structure Cleanup
 
 ### Security Fixes
@@ -219,3 +244,4 @@
 
 Bumped version to 3.0.8. Added `OnMagazineReload` hook for forward compatibility while
 retaining `OnReloadMagazine` for older builds.
+

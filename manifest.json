@@ -1,7 +1,7 @@
 {
   "name": "ModernItemBlocker",
   "title": "Modern Item Blocker",
-  "version": "4.1.3",
+  "version": "4.1.4",
   "author": "gjdunga",
   "license": "MIT",
   "description": "Blocks items, clothing, ammunition and deployables temporarily after a wipe or permanently until removed. Compatible with Oxide v2.0.7022+ and the Rust Naval Update. Provides admin commands, logging, optional duelling integration and permission-based control.",
