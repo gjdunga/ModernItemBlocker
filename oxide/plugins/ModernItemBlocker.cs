@@ -1,6 +1,6 @@
 /*
- * ModernItemBlocker  v4.1.4
- * Author : gjdunga
+ * ModernItemBlocker  v4.2.0
+ * Author : Gabriel Dungan (DunganSoft Technologies)
  * License: MIT
  *
  * PURPOSE
@@ -18,9 +18,39 @@
  *   OnMagazineReload (BaseProjectile, IAmmoContainer, BasePlayer)
  *   CanBuild         (Planner, Construction, Construction.Target)
  *
- * Verified compatible with Oxide 2.0.7182 (current as of 2026-03-25).
+ * Verified compatible with Oxide 2.0.7214 (current as of 2026-05-17).
  * No hook signature changes affecting this plugin were introduced between
- * 2.0.7022 and 2.0.7182.
+ * 2.0.7022 and 2.0.7214.
+ *
+ * CHANGES IN 4.2.0
+ * ----------------
+ *   SECURITY  : Path traversal check in HandleLogListCommand tightened.  The
+ *               previous prefix check (StartsWith on the resolved log directory)
+ *               would accept any path whose absolute form merely began with the
+ *               log directory string, e.g. ".../oxide/logs-evil/file.txt" would
+ *               match ".../oxide/logs".  The resolved directory is now suffixed
+ *               with Path.DirectorySeparatorChar before the prefix comparison so
+ *               only true children of the log directory pass the guard.
+ *   SECURITY  : LogBlockAttempt now null-guards player.transform before reading
+ *               position.  In rare teardown races (player disconnects between
+ *               the block hook firing and LogBlockAttempt running), transform
+ *               can be null; reading .position would throw NullReferenceException
+ *               and abort the log write.
+ *   PERF/SEC  : InDuel exception logging now warns ONCE per duelling plugin per
+ *               load rather than on every hook invocation.  4.1.3 introduced
+ *               PrintWarning on caught exceptions to surface plugin-API mismatches,
+ *               but on a busy server with a permanently-broken duel plugin this
+ *               produced hundreds of warnings per second.  A latched bool per
+ *               plugin reference suppresses repeated identical warnings; the
+ *               warning fires again after a plugin reload so the operator still
+ *               sees the issue.
+ *   COMPAT    : Log directory derived from Interface.Oxide.LogDirectory when
+ *               available, falling back to the previous Path.Combine of
+ *               RootDirectory.  More robust against future Oxide layout changes.
+ *   META      : Author updated to "Gabriel Dungan (DunganSoft Technologies)" in
+ *               the [Info] attribute and across all repository metadata files.
+ *   DOCS      : CONTRIBUTING.md added.  README, manifest, and changelog updated
+ *               to reflect v4.2.0.
  *
  * CHANGES IN 4.1.4
  * ----------------
@@ -144,7 +174,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Modern Item Blocker", "gjdunga", "4.1.4")]
+    [Info("Modern Item Blocker", "Gabriel Dungan (DunganSoft Technologies)", "4.2.0")]
     [Description("Blocks items, clothing, ammunition and deployables temporarily after a wipe or permanently until removed. Compatible with Oxide v2.0.7022+ and the Rust Naval Update.")]
     public class ModernItemBlocker : RustPlugin
     {
@@ -593,6 +623,11 @@ namespace Oxide.Plugins
             _permanentItems?.Clear();
             _permanentClothes?.Clear();
             _permanentAmmo?.Clear();
+
+            // Reset warn-once latches so a reload re-surfaces any still-broken
+            // duel-plugin integration to the operator.
+            _warnedDuelsManager = false;
+            _warnedDuel         = false;
         }
 
         /// <summary>
@@ -906,6 +941,15 @@ namespace Oxide.Plugins
         [PluginReference("DuelsManager")]
         private Plugin DuelsManager;
 
+        // ---------------------------------------------------------------
+        //  Warn-once latches for InDuel exception logging.
+        //  Set to true after the first warning is printed for that plugin so
+        //  subsequent hook invocations do not spam the console.  Cleared on
+        //  Unload so a plugin reload re-surfaces any still-broken integration.
+        // ---------------------------------------------------------------
+        private bool _warnedDuelsManager;
+        private bool _warnedDuel;
+
         /// <summary>
         /// Returns true if the given player is an NPC and should never be subject
         /// to item block checks.
@@ -945,7 +989,11 @@ namespace Oxide.Plugins
                 }
                 catch (Exception ex)
                 {
-                    PrintWarning($"DuelsManager.IsInDuel call failed: {ex.Message}");
+                    if (!_warnedDuelsManager)
+                    {
+                        _warnedDuelsManager = true;
+                        PrintWarning($"DuelsManager.IsInDuel call failed (further warnings suppressed until reload): {ex.Message}");
+                    }
                 }
             }
 
@@ -957,7 +1005,11 @@ namespace Oxide.Plugins
                 }
                 catch (Exception ex)
                 {
-                    PrintWarning($"Duel.IsPlayerOnActiveDuel call failed: {ex.Message}");
+                    if (!_warnedDuel)
+                    {
+                        _warnedDuel = true;
+                        PrintWarning($"Duel.IsPlayerOnActiveDuel call failed (further warnings suppressed until reload): {ex.Message}");
+                    }
                 }
             }
 
@@ -1056,11 +1108,19 @@ namespace Oxide.Plugins
         private void LogBlockAttempt(BasePlayer player, string displayName, string shortName, string category)
         {
             if (player == null) return;
-            var pos = player.transform.position;
+
+            // Defensive: player.transform may be null in rare teardown races where
+            // the player disconnects between the hook firing and this log write.
+            // Reading .position on a null transform throws NullReferenceException
+            // and aborts the audit entry entirely.
+            var transform = player.transform;
+            var posText = transform != null
+                ? $"{transform.position.x:F1},{transform.position.y:F1},{transform.position.z:F1}"
+                : "unknown";
+
             LogAction(
                 $"{SanitizeLog(player.displayName)} ({player.UserIDString}) attempted to use blocked " +
-                $"{category} '{SanitizeLog(displayName)} ({SanitizeLog(shortName)})' at " +
-                $"{pos.x:F1},{pos.y:F1},{pos.z:F1}");
+                $"{category} '{SanitizeLog(displayName)} ({SanitizeLog(shortName)})' at {posText}");
         }
 
         #endregion
@@ -1244,8 +1304,15 @@ namespace Oxide.Plugins
         /// and reads the tail of the most recent file.
         ///
         /// Security:
-        ///   * All candidate file paths are resolved with Path.GetFullPath and compared
-        ///     against the resolved logs directory to prevent path traversal.
+        ///   * Log directory is derived from Interface.Oxide.LogDirectory when set;
+        ///     this is robust against future changes to Oxide's directory layout.
+        ///     Falls back to Path.Combine(RootDirectory, "oxide", "logs") if the
+        ///     property is unavailable (older Oxide builds).
+        ///   * All candidate file paths are resolved with Path.GetFullPath and the
+        ///     resolved directory is suffixed with the OS directory separator before
+        ///     a StartsWith comparison.  Without the separator suffix the prefix
+        ///     match would accept sibling directories sharing a common prefix
+        ///     (e.g. ".../logs-evil" satisfies StartsWith(".../logs")).
         ///   * The file is read in reverse from its end rather than loading it entirely
         ///     into memory.  Reading is capped at LogTailMaxBytes (64 KB) regardless of
         ///     log file size, bounding worst-case memory allocation absolutely.
@@ -1254,7 +1321,10 @@ namespace Oxide.Plugins
         {
             try
             {
-                var logsDir     = Path.Combine(Interface.Oxide.RootDirectory, "oxide", "logs");
+                var logsDir = Interface.Oxide.LogDirectory;
+                if (string.IsNullOrEmpty(logsDir))
+                    logsDir = Path.Combine(Interface.Oxide.RootDirectory, "oxide", "logs");
+
                 var resolvedDir = Path.GetFullPath(logsDir);
 
                 if (!Directory.Exists(resolvedDir))
@@ -1262,6 +1332,13 @@ namespace Oxide.Plugins
                     caller?.Reply("Log directory not found.");
                     return;
                 }
+
+                // Suffix the resolved directory with the OS path separator so the
+                // prefix check below does not accept sibling directories that
+                // share a prefix string with the logs directory.
+                var resolvedDirPrefix = resolvedDir.EndsWith(Path.DirectorySeparatorChar.ToString())
+                    ? resolvedDir
+                    : resolvedDir + Path.DirectorySeparatorChar;
 
                 var files = Directory.GetFiles(resolvedDir, LogFileName + "_*.txt");
                 if (files.Length == 0)
@@ -1273,7 +1350,7 @@ namespace Oxide.Plugins
                 // Path traversal guard: keep only paths that resolve inside logsDir.
                 var safePaths = files
                     .Where(f => Path.GetFullPath(f)
-                        .StartsWith(resolvedDir, StringComparison.OrdinalIgnoreCase))
+                        .StartsWith(resolvedDirPrefix, StringComparison.OrdinalIgnoreCase))
                     .ToArray();
 
                 if (safePaths.Length == 0)

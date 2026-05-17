@@ -1,3 +1,71 @@
+## 4.2.0 - Path-Traversal Hardening / InDuel Warn-Once / Transform Null Guard / Author Update
+
+### Security Fixes
+
+- **Path-traversal prefix check tightened in `HandleLogListCommand`**: The 4.0.0
+  guard kept candidate log files whose `Path.GetFullPath` result began with the
+  resolved log directory string.  That string check accepted any sibling
+  directory sharing a prefix, e.g. `/srv/server/oxide/logs-evil/file.txt`
+  satisfied `StartsWith("/srv/server/oxide/logs")`.  In the current code path
+  `Directory.GetFiles(resolvedDir, ...)` does not enumerate sibling
+  directories, so exploitation required a symlink inside the log directory and
+  was therefore defence-in-depth only; nonetheless the prefix is now suffixed
+  with `Path.DirectorySeparatorChar` before the comparison so the guard fails
+  closed if the enumeration semantics ever change.
+
+- **`LogBlockAttempt` null-guards `player.transform`**: If a player disconnects
+  in the narrow window between a block hook firing and `LogBlockAttempt`
+  running, `player.transform` can be null.  Reading `.position` would throw
+  `NullReferenceException` and abort the audit-log write entirely.  Position
+  is now read defensively; when the transform is unavailable the entry records
+  `at unknown` instead of failing to write.
+
+### Performance / Operability
+
+- **`InDuel` exception logging is now warn-once per duelling plugin**: 4.1.3
+  promoted silent `catch { }` blocks to `PrintWarning` so a broken duel-plugin
+  integration would not silently bypass all blocking.  On a busy server with a
+  permanently incompatible duel plugin, however, that produced hundreds of
+  identical warnings per second.  Each call site now latches a private bool
+  after the first warning; subsequent invocations of the same call site stay
+  silent until the next plugin load (the latch is cleared in `Unload()` so
+  operators still see the issue resurface on `oxide.reload`).
+
+### Compatibility
+
+- **Log directory resolved from `Interface.Oxide.LogDirectory` when set**,
+  falling back to `Path.Combine(RootDirectory, "oxide", "logs")` for older
+  Oxide builds that do not expose the property.  This insulates the plug-in
+  against future Oxide directory-layout changes.
+
+- **Verified against Oxide 2.0.7214 (2026-05-17)**.  No hook signature changes
+  affecting `CanEquipItem`, `CanWearItem`, `OnMagazineReload`, or `CanBuild`
+  between 2.0.7022 and 2.0.7214; the plug-in continues to work without
+  modification on every release in that range.
+
+### Metadata
+
+- **Author updated** to "Gabriel Dungan (DunganSoft Technologies)" in the
+  `[Info]` attribute, `manifest.json`, `.umod.yaml`, `LICENSE`, `LICENSE.md`,
+  README credits line, and changelog header.  GitHub handle `gjdunga` is
+  preserved under the new `author_github` key in the metadata files.
+
+- **Version bumped** to 4.2.0 in plug-in source header, `[Info]` attribute,
+  `manifest.json`, `.umod.yaml`, README header and INSTALL.md.
+
+### Documentation
+
+- **`INSTALL.md` added** with fresh-install, upgrade-from-4.1.x,
+  permissions-setup, verification, uninstall and troubleshooting sections.
+- **`CONTRIBUTING.md` added** with branch model, coding-standards (target
+  framework, hot-path rules, lang-key policy), pull-request checklist and a
+  security-disclosure policy.
+- **README updated**: version/author/license header block added at the top,
+  installation section points to `INSTALL.md` for the full walkthrough, new
+  `Contributing` section points to `CONTRIBUTING.md`, credits line updated.
+
+---
+
 ## 4.1.4 - Log Name Null-Coerce Fix
 
 ### Bug Fix
