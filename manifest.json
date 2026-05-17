@@ -1,8 +1,9 @@
 {
   "name": "ModernItemBlocker",
   "title": "Modern Item Blocker",
-  "version": "4.1.4",
-  "author": "gjdunga",
+  "version": "4.2.0",
+  "author": "Gabriel Dungan (DunganSoft Technologies)",
+  "author_github": "gjdunga",
   "license": "MIT",
   "description": "Blocks items, clothing, ammunition and deployables temporarily after a wipe or permanently until removed. Compatible with Oxide v2.0.7022+ and the Rust Naval Update. Provides admin commands, logging, optional duelling integration and permission-based control.",
   "games": [
@@ -74,6 +75,14 @@
     {
       "path": "README.md",
       "role": "readme"
+    },
+    {
+      "path": "INSTALL.md",
+      "role": "install-guide"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "role": "contributing"
     },
     {
       "path": ".umod.yaml",
