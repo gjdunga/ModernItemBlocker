@@ -1,6 +1,6 @@
 # Installing ModernItemBlocker
 
-**Version:** 4.2.0
+**Version:** 4.2.1
 **Author:** Gabriel Dungan, DunganSoft Technologies
 **License:** MIT
 
@@ -12,8 +12,8 @@ This document covers installation, upgrade, configuration, removal and verificat
 
 | Component | Minimum | Verified |
 |---|---|---|
-| Rust server | Current Facepunch release | 2026-05-17 build |
-| Oxide / uMod | **v2.0.7022** (Rust Naval Update) | **v2.0.7214** (2026-05-17) |
+| Rust server | Current Facepunch release | **Built Different** build 2627.285.1 (2026-06-04) |
+| Oxide / uMod | **v2.0.7022** (Rust Naval Update) | **v2.0.7423** (2026-06-05) |
 | .NET Framework | 4.7.2 (bundled with Oxide) | 4.7.2 |
 | Disk space | < 1 MB plug-in + log space | n/a |
 
@@ -31,16 +31,27 @@ If your server runs Oxide older than v2.0.7022 the plug-in **will not load**: it
 
 ---
 
-## Upgrading from 4.1.x to 4.2.0
+## Upgrading from 4.1.x or 4.2.0 to 4.2.1
 
-The 4.2.0 release is **drop-in compatible** with 4.1.x configurations and language files. No config migration is required.
+The 4.2.1 release is **drop-in compatible** with 4.1.x and 4.2.0 configurations and language files. No config migration is required.
+
+If your server console reports the following compile error after pulling the Built Different Rust update (build 2627.285.1, 2026-06-04) on Oxide 2.0.7423, **upgrading to 4.2.1 resolves it**:
+
+```
+ModernItemBlocker - Failed to compile:
+Argument 2: cannot convert from 'Facepunch.StringView[]' to 'string[]'
+```
+
+The error is caused by Facepunch retyping `ConsoleSystem.Arg.Args` from `string[]` to `Facepunch.StringView[]` as part of the StringView console-argument refactor in Built Different. 4.2.1 materialises the StringView array to a plain `string[]` at the boundary so the rest of the plug-in keeps working unchanged. The fix is source-compatible with the older `string[]` typing, so the same plug-in file loads on both pre-Built-Different and Built-Different servers.
+
+To upgrade:
 
 1. Replace `oxide/plugins/ModernItemBlocker.cs` with the new file.
 2. Run `oxide.reload ModernItemBlocker` (or restart the server).
-3. Confirm the version printed in the console matches `4.2.0`:
+3. Confirm the version printed in the console matches `4.2.1`:
 
    ```
-   [Modern Item Blocker] Loaded plugin Modern Item Blocker v4.2.0 by Gabriel Dungan (DunganSoft Technologies)
+   [Modern Item Blocker] Loaded plugin Modern Item Blocker v4.2.1 by Gabriel Dungan (DunganSoft Technologies)
    ```
 
 If you previously edited language files, they remain compatible. New keys, if any, will fall back to the English default until you translate them.
@@ -66,7 +77,7 @@ oxide.grant user 76561198012345678 modernitemblocker.bypass
 After a successful load you should see, in `oxide/logs/oxide.log`:
 
 ```
-Loaded plugin Modern Item Blocker v4.2.0 by Gabriel Dungan (DunganSoft Technologies)
+Loaded plugin Modern Item Blocker v4.2.1 by Gabriel Dungan (DunganSoft Technologies)
 ```
 
 Run `/modernblocker list` in chat to confirm the command pipeline is functional. With the default config (all six lists empty) the output is six `(none)` rows.
@@ -95,6 +106,7 @@ The plug-in does not register any timers, save handlers, or external resources, 
 | Symptom | Cause | Fix |
 |---|---|---|
 | `Loaded plugin` line never appears | Oxide failed to compile the `.cs` file | Check `oxide/logs/oxide.log` for the compile error |
+| `Argument 2: cannot convert from 'Facepunch.StringView[]' to 'string[]'` | Built Different (2026-06-04) retyped `ConsoleSystem.Arg.Args` from `string[]` to `Facepunch.StringView[]` | Upgrade to **v4.2.1** or newer |
 | `Generating default configuration` printed every reload | Data config file invalid JSON or missing | Validate the JSON; the plug-in falls back to defaults |
 | `ChatPrefixColor '...' is invalid` warning | Hex colour did not match `^#[0-9A-Fa-f]{6}$` | Use a 6-digit hex with leading `#` (e.g. `#f44253`) |
 | `Rich Text tags were stripped from ChatPrefix` warning | Prefix contained `<...>` markup | Set a plain-text prefix; Rich Text is stripped automatically |

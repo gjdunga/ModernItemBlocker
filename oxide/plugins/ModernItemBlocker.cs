@@ -1,5 +1,5 @@
 /*
- * ModernItemBlocker  v4.2.0
+ * ModernItemBlocker  v4.2.1
  * Author : Gabriel Dungan (DunganSoft Technologies)
  * License: MIT
  *
@@ -18,9 +18,40 @@
  *   OnMagazineReload (BaseProjectile, IAmmoContainer, BasePlayer)
  *   CanBuild         (Planner, Construction, Construction.Target)
  *
- * Verified compatible with Oxide 2.0.7214 (current as of 2026-05-17).
- * No hook signature changes affecting this plugin were introduced between
- * 2.0.7022 and 2.0.7214.
+ * Verified compatible with Oxide 2.0.7423 (current as of 2026-06-06) and the
+ * Facepunch "Built Different" Rust update (build 2627.285.1, 2026-06-04).
+ *
+ * CHANGES IN 4.2.1
+ * ----------------
+ *   COMPILE-FIX : Console / RCON command no longer fails to compile against the
+ *                 Built Different Rust DLL.  Facepunch's StringView refactor
+ *                 retyped ConsoleSystem.Arg.Args from string[] to
+ *                 Facepunch.StringView[]:
+ *
+ *                   error CS1503: Argument 2: cannot convert from
+ *                   'Facepunch.StringView[]' to 'string[]'
+ *
+ *                 ExecuteCommand still operates on plain string[] (it does
+ *                 case-insensitive switch / Equals / Trim work that is awkward
+ *                 to express on StringView and would force every internal helper
+ *                 to switch types).  The fix is a boundary conversion in
+ *                 ConsoleCommand: iterate arg.Args once and call ToString() on
+ *                 each StringView, materialising a single string[] for the rest
+ *                 of the plugin.  Null/empty Args propagates as a null string[]
+ *                 so the existing "no args -> usage" branch in ExecuteCommand
+ *                 still fires.
+ *
+ *                 The plugin remains source-compatible with the pre-Built
+ *                 Different ConsoleSystem.Arg.Args (string[]) because string[]
+ *                 indexing returns string, and string.ToString() is a no-op
+ *                 returning itself.  Servers on older Rust builds therefore do
+ *                 not need a separate plugin build.
+ *
+ *   COMPAT      : Compatibility statement updated to Oxide 2.0.7423 and the
+ *                 Built Different Rust build (2627.285.1, 2026-06-04).  None of
+ *                 the four blocking hooks (CanEquipItem, CanWearItem,
+ *                 OnMagazineReload, CanBuild) changed signature in this release;
+ *                 only the console-arg API did.
  *
  * CHANGES IN 4.2.0
  * ----------------
@@ -174,7 +205,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Modern Item Blocker", "Gabriel Dungan (DunganSoft Technologies)", "4.2.0")]
+    [Info("Modern Item Blocker", "Gabriel Dungan (DunganSoft Technologies)", "4.2.1")]
     [Description("Blocks items, clothing, ammunition and deployables temporarily after a wipe or permanently until removed. Compatible with Oxide v2.0.7022+ and the Rust Naval Update.")]
     public class ModernItemBlocker : RustPlugin
     {
@@ -1147,6 +1178,15 @@ namespace Oxide.Plugins
         ///
         /// A null iplayer reaching ExecuteCommand is treated as the server console
         /// and is implicitly granted admin access.
+        ///
+        /// Built Different (Rust 2627.285.1, 2026-06-04) retyped
+        /// ConsoleSystem.Arg.Args from string[] to Facepunch.StringView[] as part
+        /// of the StringView console-argument refactor.  The boundary conversion
+        /// below materialises one string per argument so the rest of the plugin
+        /// continues to operate on plain string[] without per-call-site changes.
+        /// StringView.ToString() returns the underlying substring, so no information
+        /// is lost.  A null-or-empty Args array is propagated as null to keep the
+        /// existing "no args -> usage" branch in ExecuteCommand reachable.
         /// </summary>
         [ConsoleCommand("modernblocker")]
         private void ConsoleCommand(ConsoleSystem.Arg arg)
@@ -1155,7 +1195,16 @@ namespace Oxide.Plugins
             IPlayer iplayer = caller?.IPlayer
                 ?? covalence.Players.FindPlayerById(
                        arg.Connection?.userid.ToString() ?? string.Empty);
-            ExecuteCommand(iplayer, arg.Args);
+
+            string[] argsArray = null;
+            if (arg.Args != null && arg.Args.Length > 0)
+            {
+                argsArray = new string[arg.Args.Length];
+                for (int i = 0; i < arg.Args.Length; i++)
+                    argsArray[i] = arg.Args[i].ToString();
+            }
+
+            ExecuteCommand(iplayer, argsArray);
         }
 
         /// <summary>
