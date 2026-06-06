@@ -1,7 +1,7 @@
-name: Draft release on v5.3.x tag
+name: Draft release on version tag
 
-# Triggers whenever a tag matching v5.3.* (or the capitalised V5.3.*) is
-# pushed.  Creates a draft GitHub release attached to that tag, with
+# Triggers whenever a semver-style tag (v*.*.*) is pushed, lowercase or
+# uppercase V.  Creates a draft GitHub release attached to that tag, with
 # auto-generated notes from PRs/commits since the previous tag, and
 # uploads the plug-in source plus the shipped data and lang files as
 # release assets.  Draft state means the maintainer reviews and clicks
@@ -10,8 +10,8 @@ name: Draft release on v5.3.x tag
 on:
   push:
     tags:
-      - 'v5.3.*'
-      - 'V5.3.*'
+      - 'v*.*.*'
+      - 'V*.*.*'
 
 permissions:
   contents: write
