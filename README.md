@@ -1,9 +1,9 @@
 # ModernItemBlocker
 
-**Version:** 4.2.0
+**Version:** 4.2.1
 **Author:** Gabriel Dungan, DunganSoft Technologies
 **License:** MIT
-**Compatibility:** Oxide v2.0.7022+ (Rust Naval Update). Verified through Oxide 2.0.7214 (2026-05-17).
+**Compatibility:** Oxide v2.0.7022+ (Rust Naval Update). Verified through Oxide 2.0.7423 and the Facepunch "Built Different" Rust update (build 2627.285.1, 2026-06-04).
 
 ModernItemBlocker is a Rust server plug-in for the uMod/Oxide framework that allows administrators to block specific items, clothing and ammunition either for a limited time after each wipe or permanently until removed. The plug-in is designed to be configurable, efficient and easy to manage via in-game chat, the F1 developer console, RCON or the server console.
 
@@ -31,7 +31,7 @@ ModernItemBlocker is a Rust server plug-in for the uMod/Oxide framework that all
 
 ## Installation
 
-1. Ensure your server is running uMod/Oxide version **v2.0.7022 or newer** (Rust Naval Update). Verified against Oxide 2.0.7214.
+1. Ensure your server is running uMod/Oxide version **v2.0.7022 or newer** (Rust Naval Update). Verified against Oxide 2.0.7423 on the Built Different Rust build (2627.285.1).
 2. Download `oxide/plugins/ModernItemBlocker.cs` from this repository and place it into the `oxide/plugins` directory on your Rust server.
 3. Start the server or reload the plug-in with `oxide.reload ModernItemBlocker`. The plug-in will generate a configuration file at `oxide/data/ModernItemBlockerConfig.json` on first run.
 4. (Optional) Copy the language file you want from `oxide/lang/<code>/ModernItemBlocker.json` into your server's matching `oxide/lang/<code>/` directory. English, Russian, Spanish and Latin are shipped in this repository.

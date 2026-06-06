@@ -1,0 +1,48 @@
+name: Draft release on version tag
+
+# Triggers whenever a semver-style tag (v*.*.*) is pushed, lowercase or
+# uppercase V.  Creates a draft GitHub release attached to that tag, with
+# auto-generated notes from PRs/commits since the previous tag, and
+# uploads the plug-in source plus the shipped data and lang files as
+# release assets.  Draft state means the maintainer reviews and clicks
+# "Publish" manually; nothing is exposed to consumers until then.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'V*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  draft-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ModernItemBlocker ${{ github.ref_name }}
+          draft: true
+          generate_release_notes: true
+          files: |
+            oxide/plugins/ModernItemBlocker.cs
+            oxide/data/ModernItemBlockerConfig.json
+            oxide/lang/en/ModernItemBlocker.json
+            oxide/lang/ru/ModernItemBlocker.json
+            oxide/lang/es/ModernItemBlocker.json
+            oxide/lang/la/ModernItemBlocker.json
+            README.md
+            INSTALL.md
+            CONTRIBUTING.md
+            changelog.md
+            LICENSE.md
+            manifest.json
+            .umod.yaml

@@ -1,3 +1,58 @@
+## 4.2.1 - Built Different Compile Fix (ConsoleSystem.Arg.Args StringView Refactor)
+
+### Compile Fix
+
+- **`ConsoleSystem.Arg.Args` retyped from `string[]` to `Facepunch.StringView[]`
+  in the Facepunch "Built Different" Rust update (build 2627.285.1,
+  2026-06-04)**.  On a server running Built Different with Oxide 2.0.7423, the
+  plug-in failed to compile with:
+
+  ```
+  ModernItemBlocker - Failed to compile:
+  Argument 2: cannot convert from 'Facepunch.StringView[]' to 'string[]'
+  ```
+
+  The offending call was `ExecuteCommand(iplayer, arg.Args)` inside the
+  `[ConsoleCommand("modernblocker")]` handler.  `ExecuteCommand` operates on
+  plain `string[]` because it does case-insensitive `switch` / `Equals` /
+  `Trim` work that is awkward to express on `StringView`; converting every
+  internal helper to `StringView` would have rippled across the entire
+  Commands region.
+
+  The fix is a single boundary conversion: iterate `arg.Args` once, call
+  `ToString()` on each `StringView`, and pass the resulting `string[]` to
+  `ExecuteCommand`.  `StringView.ToString()` materialises the underlying
+  substring, so no information is lost.  A null or zero-length `Args` array
+  is propagated as a null `string[]` so the existing "no args -> usage"
+  branch in `ExecuteCommand` remains reachable.
+
+  The fix is also **source-compatible with the pre-Built Different
+  `string[]` typing**: `string[]` indexing returns `string`, and
+  `string.ToString()` is a no-op that returns itself.  Servers on Rust
+  builds older than 2627.285.1 therefore do not need a separate plug-in
+  build.
+
+### Compatibility
+
+- **Verified compatible with Oxide 2.0.7423** (2026-06-05) and the Facepunch
+  **Built Different** Rust update (build **2627.285.1**, 2026-06-04).  None of
+  the four blocking hooks used by this plug-in (`CanEquipItem`, `CanWearItem`,
+  `OnMagazineReload`, `CanBuild`) changed signature in this release; only the
+  `ConsoleSystem.Arg` argument API did.
+- Compatibility statement updated across the plug-in source header,
+  `manifest.json`, `.umod.yaml`, README header and INSTALL.md.
+
+### Documentation
+
+- INSTALL.md gains an entry in the troubleshooting table mapping the
+  `Argument 2: cannot convert ... StringView[] to string[]` error to "upgrade
+  to v4.2.1".
+- INSTALL.md "Upgrading" section spells out the specific symptom and
+  resolution so operators searching for the error message can find the fix
+  directly.
+
+---
+
 ## 4.2.0 - Path-Traversal Hardening / InDuel Warn-Once / Transform Null Guard / Author Update
 
 ### Security Fixes
