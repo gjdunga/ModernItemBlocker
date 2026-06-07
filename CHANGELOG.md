@@ -1,3 +1,15 @@
+## 4.2.6 - loglist: in-memory ring buffer (uMod static-checker fix)
+
+### Changed
+- **`/modernblocker loglist` no longer reads log files from disk.** It now serves
+  the last 20 entries from an in-memory ring buffer (last `RecentLogMax` = 50 lines)
+  populated as the plugin logs. This removes all `System.IO` use (`Directory`,
+  `FileStream`, `File.*`), which uMod's static submission checker flags — Oxide/uMod
+  plugins must not access the filesystem directly. The complete, persistent history
+  is still written by Oxide's `LogToFile` to `oxide/logs/ModernItemBlocker_<date>.txt`.
+
+No gameplay, blocking-logic, config, or permission changes.
+
 ## 4.2.5 - Relicense to GPL-3.0
 
 ### Changed

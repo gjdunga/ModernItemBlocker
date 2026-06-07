@@ -1,5 +1,5 @@
 /*
- * ModernItemBlocker  v4.2.5
+ * ModernItemBlocker  v4.2.6
  * Author : gjdunga (Gabriel Dungan, DunganSoft Technologies)
  * License: GPL-3.0
  *
@@ -197,7 +197,6 @@ using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -205,7 +204,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Modern Item Blocker", "gjdunga", "4.2.5")]
+    [Info("Modern Item Blocker", "gjdunga", "4.2.6")]
     [Description("Blocks items, clothing, ammunition and deployables temporarily after a wipe or permanently until removed. Compatible with Oxide v2.0.7022+ and the Rust Naval Update.")]
     public class ModernItemBlocker : RustPlugin
     {
@@ -233,10 +232,15 @@ namespace Oxide.Plugins
         private const int MaxNameLength = 256;
 
         /// <summary>
-        /// Maximum byte count read from the end of a log file by HandleLogListCommand.
-        /// Caps worst-case memory allocation at 64 KB regardless of log file size.
+        /// Maximum number of recent log lines retained in memory for the loglist
+        /// command. The plugin reads recent entries from this in-memory ring buffer
+        /// rather than from disk — Oxide/uMod plugins must not read the filesystem
+        /// directly. The full history remains in oxide/logs/ModernItemBlocker_*.txt.
         /// </summary>
-        private const int LogTailMaxBytes = 65536;
+        private const int RecentLogMax = 50;
+
+        /// <summary>In-memory ring buffer of the most recent log lines (oldest first).</summary>
+        private readonly Queue<string> _recentLog = new Queue<string>();
 
         // ---------------------------------------------------------------
         //  Compiled regexes (allocated once at class load time)
@@ -411,7 +415,7 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
-        /// Called by Oxide when no oxide/config file exists. Migrates a pre-4.2.5
+        /// Called by Oxide when no oxide/config file exists. Migrates a pre-4.2.6
         /// configuration from the legacy oxide/data/ModernItemBlockerConfig.json if
         /// one is present, so servers upgrading to the standard oxide/config location
         /// keep their existing settings. Otherwise writes fresh defaults.
@@ -1128,8 +1132,14 @@ namespace Oxide.Plugins
         /// <summary>
         /// Writes a timestamped log entry in ISO 8601 UTC format, pipe-separated.
         /// </summary>
-        private void LogAction(string message) =>
-            LogToFile(LogFileName, $"{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} | {message}", this);
+        private void LogAction(string message)
+        {
+            var line = $"{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} | {message}";
+            LogToFile(LogFileName, line, this);
+            // Mirror into the in-memory ring buffer that the loglist command reads.
+            _recentLog.Enqueue(line);
+            while (_recentLog.Count > RecentLogMax) _recentLog.Dequeue();
+        }
 
         /// <summary>
         /// Logs a single block event with player name, Steam ID, item names,
@@ -1346,91 +1356,27 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
-        /// Displays the last 20 lines from the most recent ModernItemBlocker log file.
+        /// Replies with up to the last 20 log entries from the in-memory ring buffer
+        /// populated by LogAction.
         ///
-        /// Oxide creates date-suffixed log files (ModernItemBlocker_YYYY-MM-DD.txt).
-        /// This command globs for ModernItemBlocker_*.txt, sorts by last-write time,
-        /// and reads the tail of the most recent file.
-        ///
-        /// Security:
-        ///   * Log directory is derived from Interface.Oxide.LogDirectory when set;
-        ///     this is robust against future changes to Oxide's directory layout.
-        ///     Falls back to Path.Combine(RootDirectory, "oxide", "logs") if the
-        ///     property is unavailable (older Oxide builds).
-        ///   * All candidate file paths are resolved with Path.GetFullPath and the
-        ///     resolved directory is suffixed with the OS directory separator before
-        ///     a StartsWith comparison.  Without the separator suffix the prefix
-        ///     match would accept sibling directories sharing a common prefix
-        ///     (e.g. ".../logs-evil" satisfies StartsWith(".../logs")).
-        ///   * The file is read in reverse from its end rather than loading it entirely
-        ///     into memory.  Reading is capped at LogTailMaxBytes (64 KB) regardless of
-        ///     log file size, bounding worst-case memory allocation absolutely.
+        /// The plugin deliberately does NOT read log files from disk: Oxide/uMod
+        /// plugins are not permitted direct filesystem access, and the static
+        /// submission checker flags it. Recent entries are kept in memory instead;
+        /// the complete, persistent history is written by Oxide's LogToFile helper to
+        /// oxide/logs/ModernItemBlocker_YYYY-MM-DD.txt, readable on the server.
         /// </summary>
         private void HandleLogListCommand(IPlayer caller)
         {
-            try
+            if (_recentLog.Count == 0)
             {
-                var logsDir = Interface.Oxide.LogDirectory;
-                if (string.IsNullOrEmpty(logsDir))
-                    logsDir = Path.Combine(Interface.Oxide.RootDirectory, "oxide", "logs");
-
-                var resolvedDir = Path.GetFullPath(logsDir);
-
-                if (!Directory.Exists(resolvedDir))
-                {
-                    caller?.Reply("Log directory not found.");
-                    return;
-                }
-
-                // Suffix the resolved directory with the OS path separator so the
-                // prefix check below does not accept sibling directories that
-                // share a prefix string with the logs directory.
-                var resolvedDirPrefix = resolvedDir.EndsWith(Path.DirectorySeparatorChar.ToString())
-                    ? resolvedDir
-                    : resolvedDir + Path.DirectorySeparatorChar;
-
-                var files = Directory.GetFiles(resolvedDir, LogFileName + "_*.txt");
-                if (files.Length == 0)
-                {
-                    caller?.Reply("No log file has been created yet.");
-                    return;
-                }
-
-                // Path traversal guard: keep only paths that resolve inside logsDir.
-                var safePaths = files
-                    .Where(f => Path.GetFullPath(f)
-                        .StartsWith(resolvedDirPrefix, StringComparison.OrdinalIgnoreCase))
-                    .ToArray();
-
-                if (safePaths.Length == 0)
-                {
-                    caller?.Reply("No accessible log file found.");
-                    return;
-                }
-
-                var logFile = safePaths.OrderByDescending(File.GetLastWriteTimeUtc).First();
-
-                // Tail-read: seek from end of file, read at most LogTailMaxBytes bytes,
-                // then split into lines and return the last 20.  This avoids loading
-                // multi-MB log files into memory for a 20-line tail request.
-                string tail;
-                using (var fs = new FileStream(logFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                {
-                    long readLen = Math.Min(fs.Length, LogTailMaxBytes);
-                    fs.Seek(-readLen, SeekOrigin.End);
-                    var buf = new byte[readLen];
-                    int read = fs.Read(buf, 0, buf.Length);
-                    tail = Encoding.UTF8.GetString(buf, 0, read);
-                }
-
-                var lines = tail.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
-                var start = Math.Max(0, lines.Length - 20);
-                caller?.Reply(string.Join("\n", lines.Skip(start)));
+                caller?.Reply("No log entries have been recorded since the plugin last loaded. " +
+                              "The full history is in oxide/logs/ModernItemBlocker_<date>.txt on the server.");
+                return;
             }
-            catch (Exception ex)
-            {
-                caller?.Reply($"Error reading log: {ex.Message}");
-            }
+
+            var lines = _recentLog.ToArray();
+            var start = Math.Max(0, lines.Length - 20);
+            caller?.Reply(string.Join("\n", lines.Skip(start)));
         }
 
         /// <summary>
