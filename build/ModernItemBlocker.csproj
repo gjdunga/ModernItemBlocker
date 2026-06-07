@@ -1,0 +1,69 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    ModernItemBlocker — out-of-server compile validation.
+
+    Does NOT produce the shipped artifact (that is the raw
+    oxide/plugins/ModernItemBlocker.cs, compiled by Oxide on the live server).
+    This project type-checks that source against the real Oxide/Rust/Unity
+    assemblies so API breaks are caught at build time. See BUILD.md.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+
+    <OutputType>Library</OutputType>
+    <AssemblyName>ModernItemBlocker</AssemblyName>
+    <RootNamespace>Oxide.Plugins</RootNamespace>
+
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <Deterministic>true</Deterministic>
+    <Optimize>false</Optimize>
+    <NoWarn>$(NoWarn);1701;1702;1685</NoWarn>
+
+    <!-- Override precedence: -p:ManagedDir=... > RUST_MANAGED env > repo default -->
+    <ManagedDir Condition="'$(ManagedDir)' == '' and '$(RUST_MANAGED)' != ''">$(RUST_MANAGED)</ManagedDir>
+    <ManagedDir Condition="'$(ManagedDir)' == ''">$(MSBuildThisFileDirectory)../references/RustDedicated_Data/Managed</ManagedDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)../oxide/plugins/ModernItemBlocker.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="$(ManagedDir)/*.dll">
+      <HintPath>%(Identity)</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Remove="$(ManagedDir)/mscorlib.dll" />
+    <Reference Remove="$(ManagedDir)/System.dll" />
+    <Reference Remove="$(ManagedDir)/System.*.dll" />
+    <Reference Remove="$(ManagedDir)/netstandard.dll" />
+    <Reference Remove="$(ManagedDir)/Mono.*.dll" />
+    <Reference Remove="$(ManagedDir)/Microsoft.*.dll" />
+    <!-- Oxide.References bundles its own copy of Newtonsoft.Json types, which
+         collides with the standalone Newtonsoft.Json.dll (CS0433 on
+         JsonPropertyAttribute, etc.). Keep the complete Newtonsoft.Json.dll and
+         drop the bundled facade. -->
+    <Reference Remove="$(ManagedDir)/Oxide.References.dll" />
+  </ItemGroup>
+
+  <Target Name="EnsureManagedDir" BeforeTargets="ResolveAssemblyReferences;BeforeCompile">
+    <Error Condition="!Exists('$(ManagedDir)')"
+           Text="Reference assemblies not found at '$(ManagedDir)'. Run tools/fetch-references.sh (Linux/macOS) or tools/fetch-references.ps1 (Windows), or set -p:ManagedDir=... or RUST_MANAGED to a server's RustDedicated_Data/Managed folder. See BUILD.md." />
+  </Target>
+
+</Project>

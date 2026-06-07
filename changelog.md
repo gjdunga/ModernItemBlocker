@@ -1,3 +1,32 @@
+## 4.2.2 - uMod submission prep & compile chain
+
+### Changed
+
+- **`[Info]` author set to the uMod username `gjdunga`.** uMod approval requires the
+  author attribute to be the submitting account's username. Full credit (Gabriel
+  Dungan, DunganSoft Technologies) is retained in the source header, README, and
+  `manifest.json`.
+- Removed the duplicate top-level `LICENSE` file. `LICENSE.md` — referenced by
+  `manifest.json` and the release workflow, and carrying the full copyright line —
+  is the canonical MIT license.
+
+### Build / tooling
+
+- Added an out-of-server compile-validation chain so API breaks (like the Built
+  Different `StringView` retype fixed in 4.2.1) are caught at build time instead of
+  on a live server:
+  - `build/ModernItemBlocker.csproj` type-checks the plug-in against the real
+    Oxide/Rust/Unity assemblies (target `net48`). It excludes the bundled
+    `Oxide.References` facade, which otherwise collides with `Newtonsoft.Json` on
+    `JsonPropertyAttribute` (CS0433).
+  - `tools/fetch-references.sh` / `tools/fetch-references.ps1` stage the reference
+    assemblies from a Rust dedicated server + Oxide install.
+  - `.github/workflows/compile.yml` compiles on every push / PR, with the reference
+    assemblies cached on a weekly key.
+  - `Makefile` and `BUILD.md` document the local workflow.
+
+No gameplay, configuration, hook, or data-format changes. Drop-in compatible with 4.2.x.
+
 ## 4.2.1 - Built Different Compile Fix (ConsoleSystem.Arg.Args StringView Refactor)
 
 ### Compile Fix
