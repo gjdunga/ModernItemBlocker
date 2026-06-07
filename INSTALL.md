@@ -1,6 +1,6 @@
 # Installing ModernItemBlocker
 
-**Version:** 4.2.5
+**Version:** 4.2.6
 **Author:** Gabriel Dungan, DunganSoft Technologies
 **License:** GPL-3.0
 
@@ -48,10 +48,10 @@ To upgrade:
 
 1. Replace `oxide/plugins/ModernItemBlocker.cs` with the new file.
 2. Run `oxide.reload ModernItemBlocker` (or restart the server).
-3. Confirm the version printed in the console matches `4.2.5`:
+3. Confirm the version printed in the console matches `4.2.6`:
 
    ```
-   [Modern Item Blocker] Loaded plugin Modern Item Blocker v4.2.5 by gjdunga
+   [Modern Item Blocker] Loaded plugin Modern Item Blocker v4.2.6 by gjdunga
    ```
 
 If you previously edited language files, they remain compatible. New keys, if any, will fall back to the English default until you translate them.
@@ -77,7 +77,7 @@ oxide.grant user 76561198012345678 modernitemblocker.bypass
 After a successful load you should see, in `oxide/logs/oxide.log`:
 
 ```
-Loaded plugin Modern Item Blocker v4.2.5 by gjdunga
+Loaded plugin Modern Item Blocker v4.2.6 by gjdunga
 ```
 
 Run `/modernblocker list` in chat to confirm the command pipeline is functional. With the default config (all six lists empty) the output is six `(none)` rows.
