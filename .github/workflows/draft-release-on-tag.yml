@@ -25,6 +25,18 @@ jobs:
         with:
           fetch-depth: 0
 
+      # The four lang files share the basename ModernItemBlocker.json (they live
+      # in oxide/lang/<locale>/). Release assets are named by basename, so
+      # uploading them by their raw paths collides all four onto one asset and
+      # fails the run. Stage them under unique ModernItemBlocker-<locale>.json
+      # names first.
+      - name: Stage language assets with unique names
+        run: |
+          mkdir -p release-assets
+          for loc in en ru es la; do
+            cp "oxide/lang/$loc/ModernItemBlocker.json" "release-assets/ModernItemBlocker-$loc.json"
+          done
+
       - name: Create draft release
         uses: softprops/action-gh-release@v2
         with:
@@ -35,10 +47,10 @@ jobs:
           files: |
             oxide/plugins/ModernItemBlocker.cs
             oxide/data/ModernItemBlockerConfig.json
-            oxide/lang/en/ModernItemBlocker.json
-            oxide/lang/ru/ModernItemBlocker.json
-            oxide/lang/es/ModernItemBlocker.json
-            oxide/lang/la/ModernItemBlocker.json
+            release-assets/ModernItemBlocker-en.json
+            release-assets/ModernItemBlocker-ru.json
+            release-assets/ModernItemBlocker-es.json
+            release-assets/ModernItemBlocker-la.json
             README.md
             INSTALL.md
             CONTRIBUTING.md
