@@ -33,8 +33,10 @@ jobs:
       - name: Stage language assets with unique names
         run: |
           mkdir -p release-assets
-          for loc in en ru es la; do
-            cp "oxide/lang/$loc/ModernItemBlocker.json" "release-assets/ModernItemBlocker-$loc.json"
+          for dir in oxide/lang/*/; do
+            loc="$(basename "$dir")"
+            src="${dir}ModernItemBlocker.json"
+            [ -f "$src" ] && cp "$src" "release-assets/ModernItemBlocker-${loc}.json"
           done
 
       - name: Create draft release
@@ -47,10 +49,7 @@ jobs:
           files: |
             oxide/plugins/ModernItemBlocker.cs
             oxide/data/ModernItemBlockerConfig.json
-            release-assets/ModernItemBlocker-en.json
-            release-assets/ModernItemBlocker-ru.json
-            release-assets/ModernItemBlocker-es.json
-            release-assets/ModernItemBlocker-la.json
+            release-assets/ModernItemBlocker-*.json
             README.md
             INSTALL.md
             CONTRIBUTING.md

@@ -1,0 +1,16 @@
+{
+  "ItemBlocked": "Du kannst diesen Gegenstand nicht verwenden.",
+  "ClothBlocked": "Du kannst dieses Kleidungsstück nicht anlegen.",
+  "AmmoBlocked": "Du kannst diese Munition nicht verwenden.",
+  "BuildBlocked": "Du kannst diesen Gegenstand nicht platzieren.",
+  "TimedSuffix": "\n{0}T {1:00}:{2:00}:{3:00} bis zur Freigabe verbleibend.",
+  "PermanentSuffix": "\nDieser Gegenstand ist dauerhaft gesperrt, bis ein Administrator ihn entfernt.",
+  "NotAllowed": "Du hast keine Berechtigung, diesen Befehl zu verwenden.",
+  "InvalidArgs": "Ungültige Syntax. Verwende /modernblocker help für Details.",
+  "NameTooLong": "Gegenstandsname ist zu lang (max. 256 Zeichen).",
+  "Added": "'{0}' zur Liste {1} {2} hinzugefügt.",
+  "Removed": "'{0}' aus der Liste {1} {2} entfernt.",
+  "NotFound": "'{0}' wurde in der Liste {1} {2} nicht gefunden.",
+  "ListHeader": "Dauerhaft gesperrte Gegenstände: {0}\nDauerhaft gesperrte Kleidung: {1}\nDauerhaft gesperrte Munition: {2}\nZeitlich gesperrte Gegenstände: {3}\nZeitlich gesperrte Kleidung: {4}\nZeitlich gesperrte Munition: {5}",
+  "Usage": "Verwendung:\n /modernblocker list\n /modernblocker add <permanent|timed> <item|cloth|ammo> <n>\n /modernblocker remove <permanent|timed> <item|cloth|ammo> <n>\n /modernblocker reload\n /modernblocker loglist"
+}

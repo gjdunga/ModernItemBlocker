@@ -1,6 +1,6 @@
 # ModernItemBlocker
 
-**Version:** 4.2.2
+**Version:** 4.2.3
 **Author:** Gabriel Dungan, DunganSoft Technologies
 **License:** MIT
 **Compatibility:** Oxide v2.0.7022+ (Rust Naval Update). Verified through Oxide 2.0.7423 and the Facepunch "Built Different" Rust update (build 2627.285.1, 2026-06-04).

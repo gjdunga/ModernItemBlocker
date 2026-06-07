@@ -1,0 +1,16 @@
+{
+  "ItemBlocked": "你不能使用此物品。",
+  "ClothBlocked": "你不能穿戴此服装。",
+  "AmmoBlocked": "你不能使用此弹药。",
+  "BuildBlocked": "你不能放置此物品。",
+  "TimedSuffix": "\n距离解锁还有 {0}天 {1:00}:{2:00}:{3:00}。",
+  "PermanentSuffix": "\n此物品被永久封禁，直到管理员将其移除。",
+  "NotAllowed": "你没有权限使用此命令。",
+  "InvalidArgs": "语法无效。使用 /modernblocker help 查看详情。",
+  "NameTooLong": "物品名称过长（最多 256 个字符）。",
+  "Added": "已将 '{0}' 添加到 {1} {2} 列表。",
+  "Removed": "已从 {1} {2} 列表中移除 '{0}'。",
+  "NotFound": "在 {1} {2} 列表中未找到 '{0}'。",
+  "ListHeader": "永久封禁物品：{0}\n永久封禁服装：{1}\n永久封禁弹药：{2}\n限时封禁物品：{3}\n限时封禁服装：{4}\n限时封禁弹药：{5}",
+  "Usage": "用法：\n /modernblocker list\n /modernblocker add <permanent|timed> <item|cloth|ammo> <n>\n /modernblocker remove <permanent|timed> <item|cloth|ammo> <n>\n /modernblocker reload\n /modernblocker loglist"
+}

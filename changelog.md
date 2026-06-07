@@ -1,3 +1,18 @@
+## 4.2.3 - Full localization (8 locales)
+
+### Localization
+- Added German (`de`), French (`fr`), Portuguese (`pt`) and Simplified Chinese
+  (`zh-CN`) translations. The plugin now ships all eight locales: `en`, `es`, `ru`,
+  `la`, `zh-CN`, `de`, `fr`, `pt`. Placeholders (`{0}`–`{5}`, `{1:00}` time fields),
+  `\n` line breaks, and `/modernblocker` command literals are preserved in every
+  locale.
+
+### CI
+- `draft-release-on-tag.yml` now stages and attaches **all** locale files via a glob
+  instead of a hardcoded four, so future locales are included automatically.
+
+No gameplay, configuration, hook, or data-format changes.
+
 ## 4.2.2 - uMod submission prep & compile chain
 
 ### Changed
