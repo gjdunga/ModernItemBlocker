@@ -1,17 +1,8 @@
 name: Draft release on version tag
 
-# Triggers whenever a semver-style tag (v*.*.*) is pushed, lowercase or
-# uppercase V.  Creates a draft GitHub release attached to that tag, with
-# auto-generated notes from PRs/commits since the previous tag, and
-# uploads the plug-in source plus the shipped data and lang files as
-# release assets.  Draft state means the maintainer reviews and clicks
-# "Publish" manually; nothing is exposed to consumers until then.
-
 on:
   push:
-    tags:
-      - 'v*.*.*'
-      - 'V*.*.*'
+    tags: [ 'v*.*.*', 'V*.*.*' ]
 
 permissions:
   contents: write
@@ -20,40 +11,25 @@ jobs:
   draft-release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      # The four lang files share the basename ModernItemBlocker.json (they live
-      # in oxide/lang/<locale>/). Release assets are named by basename, so
-      # uploading them by their raw paths collides all four onto one asset and
-      # fails the run. Stage them under unique ModernItemBlocker-<locale>.json
-      # names first.
-      - name: Stage language assets with unique names
+      - name: Stage release assets (lang files get unique, locale-suffixed names)
         run: |
           mkdir -p release-assets
+          cp "oxide/plugins/ModernItemBlocker.cs" release-assets/
           for dir in oxide/lang/*/; do
             loc="$(basename "$dir")"
             src="${dir}ModernItemBlocker.json"
             [ -f "$src" ] && cp "$src" "release-assets/ModernItemBlocker-${loc}.json"
           done
-
-      - name: Create draft release
-        uses: softprops/action-gh-release@v2
+          [ -f "oxide/config/ModernItemBlocker.json" ] && cp "oxide/config/ModernItemBlocker.json" "release-assets/ModernItemBlocker-config.json" || true
+      - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: ModernItemBlocker ${{ github.ref_name }}
+          name: Modern Item Blocker ${{ github.ref_name }}
           draft: true
           generate_release_notes: true
           files: |
-            oxide/plugins/ModernItemBlocker.cs
-            oxide/data/ModernItemBlockerConfig.json
+            release-assets/ModernItemBlocker.cs
             release-assets/ModernItemBlocker-*.json
-            README.md
-            INSTALL.md
-            CONTRIBUTING.md
-            changelog.md
-            LICENSE.md
-            manifest.json
-            .umod.yaml

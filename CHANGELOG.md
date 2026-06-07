@@ -1,3 +1,19 @@
+## 4.2.4 - DunganSoft Plugin Standard + config moved to oxide/config
+
+### Changed
+- **Configuration moved from `oxide/data/ModernItemBlockerConfig.json` to the
+  uMod-standard `oxide/config/ModernItemBlocker.json`** (via the standard Oxide
+  `Config` API). Existing servers are migrated automatically: on first load after
+  the update, a legacy `oxide/data` config is read and re-saved to `oxide/config`,
+  preserving all settings. No manual action required.
+- Adopted the shared [DunganSoft Plugin Standard](https://github.com/gjdunga/rust-plugin-standard):
+  unified `manifest.json` + `.umod.yaml` to the canonical schema (`author_handle`,
+  `tags`, structured `links`); renamed `changelog.md`->`CHANGELOG.md` and
+  `LICENSE.md`->`LICENSE`; added `SECURITY.md`, `.editorconfig`, `.gitattributes`;
+  vendored `tools/check-standard.py` + a `standards.yml` CI gate.
+
+No gameplay, hook, or blocking-logic changes.
+
 ## 4.2.3 - Full localization (8 locales)
 
 ### Localization
