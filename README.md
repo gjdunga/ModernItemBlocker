@@ -1,8 +1,8 @@
 # ModernItemBlocker
 
-**Version:** 4.2.4
+**Version:** 4.2.5
 **Author:** Gabriel Dungan, DunganSoft Technologies
-**License:** MIT
+**License:** GPL-3.0
 **Compatibility:** Oxide v2.0.7022+ (Rust Naval Update). Verified through Oxide 2.0.7423 and the Facepunch "Built Different" Rust update (build 2627.285.1, 2026-06-04).
 
 ModernItemBlocker is a Rust server plug-in for the uMod/Oxide framework that allows administrators to block specific items, clothing and ammunition either for a limited time after each wipe or permanently until removed. The plug-in is designed to be configurable, efficient and easy to manage via in-game chat, the F1 developer console, RCON or the server console.
@@ -13,7 +13,7 @@ ModernItemBlocker is a Rust server plug-in for the uMod/Oxide framework that all
 
 **Timed and permanent blocks** - Define separate lists of items, clothes and ammunition that are blocked for a configurable number of hours after each wipe (timed) or blocked indefinitely across wipes (permanent). Timed blocks automatically expire once the configured duration has passed.
 
-**Configuration file** - All settings and lists are stored in `oxide/data/ModernItemBlockerConfig.json`. The plug-in will create this file on first run and populate it with sensible defaults. You can edit it manually and reload it in game with `/modernblocker reload`.
+**Configuration file** - All settings and lists are stored in `oxide/config/ModernItemBlocker.json`. The plug-in will create this file on first run and populate it with sensible defaults. You can edit it manually and reload it in game with `/modernblocker reload`.
 
 **Administrative commands** - Manage blocked items directly from the game or via RCON without editing files. The `/modernblocker` command supports listing the current block lists, adding new entries and removing existing ones.
 
@@ -33,7 +33,7 @@ ModernItemBlocker is a Rust server plug-in for the uMod/Oxide framework that all
 
 1. Ensure your server is running uMod/Oxide version **v2.0.7022 or newer** (Rust Naval Update). Verified against Oxide 2.0.7423 on the Built Different Rust build (2627.285.1).
 2. Download `oxide/plugins/ModernItemBlocker.cs` from this repository and place it into the `oxide/plugins` directory on your Rust server.
-3. Start the server or reload the plug-in with `oxide.reload ModernItemBlocker`. The plug-in will generate a configuration file at `oxide/data/ModernItemBlockerConfig.json` on first run.
+3. Start the server or reload the plug-in with `oxide.reload ModernItemBlocker`. The plug-in will generate a configuration file at `oxide/config/ModernItemBlocker.json` on first run.
 4. (Optional) Copy the language file you want from `oxide/lang/<code>/ModernItemBlocker.json` into your server's matching `oxide/lang/<code>/` directory. English, Russian, Spanish and Latin are shipped in this repository.
 
 For a more detailed walkthrough see [INSTALL.md](INSTALL.md).
@@ -59,7 +59,7 @@ Item names are case-insensitive and may be the English display name or the engin
 Removes an entry from the specified list. Names are matched case-insensitively.
 
 ### `/modernblocker reload`
-Reloads the configuration from `oxide/data/ModernItemBlockerConfig.json` without unloading the plug-in. Use this after editing the file by hand.
+Reloads the configuration from `oxide/config/ModernItemBlocker.json` without unloading the plug-in. Use this after editing the file by hand.
 
 ### `/modernblocker loglist`
 Displays the last 20 entries from the plug-in's log file. Restricted to users with the `modernitemblocker.admin` permission. To review the full log, open `oxide/logs/ModernItemBlocker_YYYY-MM-DD.txt` on your server.
@@ -71,7 +71,7 @@ Displays a summary of available commands and usage.
 
 ## Configuration
 
-The configuration file is stored at `oxide/data/ModernItemBlockerConfig.json`. An example:
+The configuration file is stored at `oxide/config/ModernItemBlocker.json`. An example:
 
 ```json
 {
@@ -156,7 +156,7 @@ Pull requests and issue reports are welcome. Before opening a PR please read [CO
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE.md](LICENSE.md) for details.
+This project is licensed under the GPL-3.0 License. See [LICENSE](LICENSE) for details.
 
 ## Credits
 

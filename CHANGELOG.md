@@ -1,3 +1,17 @@
+## 4.2.5 - Relicense to GPL-3.0
+
+### Changed
+- **License changed from MIT to GPL-3.0.** `LICENSE`, `manifest.json`, `.umod.yaml`,
+  and the source header now reference the GNU General Public License v3.0. Versions
+  up to 4.2.4 remain available under MIT (license changes are not retroactive); this
+  and future versions are GPL-3.0.
+
+### Docs
+- Corrected README/INSTALL references to the config path (now
+  `oxide/config/ModernItemBlocker.json`, moved from `oxide/data` in 4.2.4).
+
+No code, hook, or blocking-logic changes.
+
 ## 4.2.4 - DunganSoft Plugin Standard + config moved to oxide/config
 
 ### Changed
