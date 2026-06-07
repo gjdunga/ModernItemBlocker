@@ -1,6 +1,6 @@
 name: ModernItemBlocker
 title: Modern Item Blocker
-version: 4.2.4
+version: 4.2.5
 author: Gabriel Dungan (DunganSoft Technologies)
 author_handle: gjdunga
 description: >-
@@ -10,7 +10,7 @@ description: >-
   Rust Naval Update.
 game: rust
 language: C#
-license: MIT
+license: GPL-3.0
 tags:
   - items
   - permissions

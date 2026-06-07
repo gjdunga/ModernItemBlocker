@@ -107,4 +107,4 @@ Be civil and constructive. Disrespectful behaviour, harassment, or personal atta
 
 ## License
 
-By contributing you agree that your contribution will be licensed under the [MIT License](LICENSE.md), the same licence the rest of the project uses.
+By contributing you agree that your contribution will be licensed under the [GPL-3.0 License](LICENSE.md), the same licence the rest of the project uses.
