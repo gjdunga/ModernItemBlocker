@@ -1,24 +1,18 @@
 {
   "name": "ModernItemBlocker",
   "title": "Modern Item Blocker",
-  "version": "4.2.3",
+  "version": "4.2.4",
   "author": "Gabriel Dungan (DunganSoft Technologies)",
-  "author_github": "gjdunga",
-  "license": "MIT",
+  "author_handle": "gjdunga",
   "description": "Blocks items, clothing, ammunition and deployables temporarily after a wipe or permanently until removed. Compatible with Oxide v2.0.7022+ and the Rust Naval Update. Provides admin commands, logging, optional duelling integration and permission-based control.",
-  "games": [
-    "rust"
-  ],
+  "license": "MIT",
+  "game": "rust",
   "language": "csharp",
-  "website": "https://github.com/gjdunga/ModernItemBlocker",
-  "source": "https://github.com/gjdunga/ModernItemBlocker",
-  "documentation": "https://github.com/gjdunga/ModernItemBlocker#readme",
-  "issues": "https://github.com/gjdunga/ModernItemBlocker/issues",
-  "categories": [
-    "Items",
-    "Permissions",
-    "Administration",
-    "Quality of Life"
+  "tags": [
+    "items",
+    "permissions",
+    "administration",
+    "quality-of-life"
   ],
   "permissions": [
     {
@@ -38,63 +32,13 @@
     }
   ],
   "compatibility": {
-    "oxide": ">=2.0.7022",
-    "game_versions": [
-      "latest"
-    ]
+    "oxide_minimum": "2.0.7022",
+    "oxide_verified": "2.0.7423"
   },
-  "files": [
-    {
-      "path": "oxide/plugins/ModernItemBlocker.cs",
-      "role": "plugin"
-    },
-    {
-      "path": "oxide/data/ModernItemBlockerConfig.json",
-      "role": "config-sample"
-    },
-    {
-      "path": "oxide/lang/en/ModernItemBlocker.json",
-      "role": "lang-en"
-    },
-    {
-      "path": "oxide/lang/ru/ModernItemBlocker.json",
-      "role": "lang-ru"
-    },
-    {
-      "path": "oxide/lang/es/ModernItemBlocker.json",
-      "role": "lang-es"
-    },
-    {
-      "path": "oxide/lang/la/ModernItemBlocker.json",
-      "role": "lang-la"
-    },
-    {
-      "path": "LICENSE.md",
-      "role": "license"
-    },
-    {
-      "path": "README.md",
-      "role": "readme"
-    },
-    {
-      "path": "INSTALL.md",
-      "role": "install-guide"
-    },
-    {
-      "path": "CONTRIBUTING.md",
-      "role": "contributing"
-    },
-    {
-      "path": ".umod.yaml",
-      "role": "umod-metadata"
-    },
-    {
-      "path": "manifest.json",
-      "role": "manifest"
-    },
-    {
-      "path": "changelog.md",
-      "role": "changelog"
-    }
-  ]
+  "links": {
+    "source": "https://github.com/gjdunga/ModernItemBlocker",
+    "documentation": "https://github.com/gjdunga/ModernItemBlocker#readme",
+    "issues": "https://github.com/gjdunga/ModernItemBlocker/issues",
+    "website": "https://github.com/gjdunga/ModernItemBlocker"
+  }
 }

@@ -1,5 +1,5 @@
 /*
- * ModernItemBlocker  v4.2.3
+ * ModernItemBlocker  v4.2.4
  * Author : gjdunga (Gabriel Dungan, DunganSoft Technologies)
  * License: MIT
  *
@@ -205,7 +205,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Modern Item Blocker", "gjdunga", "4.2.3")]
+    [Info("Modern Item Blocker", "gjdunga", "4.2.4")]
     [Description("Blocks items, clothing, ammunition and deployables temporarily after a wipe or permanently until removed. Compatible with Oxide v2.0.7022+ and the Rust Naval Update.")]
     public class ModernItemBlocker : RustPlugin
     {
@@ -411,61 +411,61 @@ namespace Oxide.Plugins
         }
 
         /// <summary>
-        /// Called by Oxide when no config file exists.
-        /// Creates a default configuration and persists it to disk immediately so
-        /// operators have a file to edit before the next reload.
+        /// Called by Oxide when no oxide/config file exists. Migrates a pre-4.2.4
+        /// configuration from the legacy oxide/data/ModernItemBlockerConfig.json if
+        /// one is present, so servers upgrading to the standard oxide/config location
+        /// keep their existing settings. Otherwise writes fresh defaults.
         /// </summary>
         protected override void LoadDefaultConfig()
         {
-            PrintWarning("Generating default configuration.");
-            _config = Configuration.DefaultConfig();
-            SaveDataConfig();
+            try
+            {
+                if (Interface.Oxide.DataFileSystem.ExistsDatafile(DataConfigName))
+                {
+                    _config = Interface.Oxide.DataFileSystem.ReadObject<Configuration>(DataConfigName);
+                    if (_config != null)
+                        PrintWarning("Migrated configuration from oxide/data to oxide/config.");
+                }
+            }
+            catch { /* fall through to defaults */ }
+
+            if (_config == null)
+            {
+                PrintWarning("Generating default configuration.");
+                _config = Configuration.DefaultConfig();
+            }
         }
 
         /// <summary>
-        /// Routes Oxide's standard LoadConfig call to our data-file loader.
-        /// Oxide calls this during plugin load; we redirect to oxide/data/ instead
-        /// of the default oxide/config/ location.
+        /// Reads configuration from oxide/config/ModernItemBlocker.json via Oxide's
+        /// standard Config API. Oxide calls LoadDefaultConfig (which handles legacy
+        /// migration) and SaveConfig automatically when the file is missing. On a
+        /// corrupt/null read we fall back to defaults. ValidateConfig enforces field
+        /// constraints; SaveConfig persists new fields and corrections.
         /// </summary>
-        protected override void LoadConfig() => LoadDataConfig();
-
-        /// <summary>
-        /// Routes Oxide's standard SaveConfig call to our data-file writer.
-        /// Keeps the routing transparent so internal callers can use SaveConfig()
-        /// without knowing the storage location.
-        /// </summary>
-        protected override void SaveConfig() => SaveDataConfig();
-
-        /// <summary>
-        /// Reads configuration from oxide/data/ModernItemBlockerConfig.json.
-        ///
-        /// On success, ValidateConfig is called to enforce field constraints and
-        /// cache derived values.  On any error (file missing, JSON invalid, null
-        /// result), falls back to defaults and writes a fresh file.
-        /// </summary>
-        private void LoadDataConfig()
+        protected override void LoadConfig()
         {
+            base.LoadConfig();
             try
             {
-                _config = Interface.Oxide.DataFileSystem.ReadObject<Configuration>(DataConfigName);
+                _config = Config.ReadObject<Configuration>();
                 if (_config == null)
                     throw new Exception("Deserialized config was null.");
-                ValidateConfig();
             }
             catch
             {
-                PrintWarning("Data configuration file not found or invalid. Creating default.");
-                _config = Configuration.DefaultConfig();
-                SaveDataConfig();
+                PrintWarning("Configuration file not found or invalid. Creating default.");
+                LoadDefaultConfig();
             }
+            ValidateConfig();
+            SaveConfig();
         }
 
         /// <summary>
-        /// Serialises the current _config object to oxide/data/ModernItemBlockerConfig.json
-        /// via Oxide's DataFileSystem (Newtonsoft.Json, indented format).
+        /// Serialises the current _config object to oxide/config/ModernItemBlocker.json
+        /// via Oxide's standard Config API (Newtonsoft.Json, indented format).
         /// </summary>
-        private void SaveDataConfig() =>
-            Interface.Oxide.DataFileSystem.WriteObject(DataConfigName, _config);
+        protected override void SaveConfig() => Config.WriteObject(_config, true);
 
         /// <summary>
         /// Validates loaded configuration values, corrects out-of-range fields, and
@@ -1247,7 +1247,7 @@ namespace Oxide.Plugins
                     break;
 
                 case "reload":
-                    LoadDataConfig();
+                    LoadConfig();
                     BuildHashSets();
                     SubscribeHooks();
                     caller?.Reply("ModernItemBlocker configuration reloaded.");
