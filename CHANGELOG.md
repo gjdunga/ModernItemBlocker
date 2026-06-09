@@ -1,3 +1,12 @@
+## 5.0.0 - 2026-06-09
+
+### Changed
+- Version aligned to a whole-number release (4.2.6 -> 5.0.0). No functional changes.
+
+### Security
+- Release is code-signed: a detached OpenPGP signature (`ModernItemBlocker.cs.asc`) and the public
+  key (`gjdunga.asc`) are attached and verifiable.
+
 ## 4.2.6 - loglist: in-memory ring buffer (uMod static-checker fix)
 
 ### Changed
