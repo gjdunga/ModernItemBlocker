@@ -5,7 +5,7 @@
 > the screenshots and confirm the price before publishing. Regenerate on each release.
 
 - **Title:** Modern Item Blocker
-- **Version:** 4.2.6
+- **Version:** 5.0.0
 - **Price:** Free
 - **Tags:** items, permissions, administration, quality-of-life
 - **Compatibility:** Oxide **2.0.7022+** (verified 2.0.7423)
@@ -56,17 +56,14 @@ gpg --verify ModernItemBlocker.cs.asc ModernItemBlocker.cs
 
 Expect: `Good signature from "Gabriel Dungan <gjdunga@gmail.com>"`.
 
-## What's new in 4.2.6
+## What's new in 5.0.0
 
 ### Changed
-- **`/modernblocker loglist` no longer reads log files from disk.** It now serves
-  the last 20 entries from an in-memory ring buffer (last `RecentLogMax` = 50 lines)
-  populated as the plugin logs. This removes all `System.IO` use (`Directory`,
-  `FileStream`, `File.*`), which uMod's static submission checker flags — Oxide/uMod
-  plugins must not access the filesystem directly. The complete, persistent history
-  is still written by Oxide's `LogToFile` to `oxide/logs/ModernItemBlocker_<date>.txt`.
+- Version aligned to a whole-number release (4.2.6 -> 5.0.0). No functional changes.
 
-No gameplay, blocking-logic, config, or permission changes.
+### Security
+- Release is code-signed: a detached OpenPGP signature (`ModernItemBlocker.cs.asc`) and the public
+  key (`gjdunga.asc`) are attached and verifiable.
 
 ## Links
 
