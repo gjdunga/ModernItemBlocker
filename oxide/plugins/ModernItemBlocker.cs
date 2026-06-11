@@ -1,5 +1,5 @@
 /*
- * ModernItemBlocker  v4.2.6
+ * ModernItemBlocker  v5.0.1
  * Author : gjdunga (Gabriel Dungan, DunganSoft Technologies)
  * License: GPL-3.0
  *
@@ -204,7 +204,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Modern Item Blocker", "gjdunga", "5.0.0")]
+    [Info("Modern Item Blocker", "gjdunga", "5.0.1")]
     [Description("Blocks items, clothing, ammunition and deployables temporarily after a wipe or permanently until removed. Compatible with Oxide v2.0.7022+ and the Rust Naval Update.")]
     public class ModernItemBlocker : RustPlugin
     {

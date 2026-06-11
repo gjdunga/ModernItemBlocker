@@ -1,3 +1,8 @@
+## 5.0.1 - 2026-06-11
+
+### Fixed
+- In-file source header version banner corrected to match the `[Info]`/release version. No functional changes.
+
 ## 5.0.0 - 2026-06-09
 
 ### Changed
